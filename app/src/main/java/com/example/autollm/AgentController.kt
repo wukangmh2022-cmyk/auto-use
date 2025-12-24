@@ -13,13 +13,15 @@ class AgentController(
     private val history = mutableListOf<String>()
     private val maxHistorySize = 5
     
+    // 状态监测变量
+    private val stateActionHistory = mutableListOf<String>()
+    private var lastUiHashForStuck: Int = 0
+    private var reasoningLevel: Int = 0
+
     var currentPlan: TaskPlanner.TaskPlan? = null
         private set
     
     var onPlanUpdated: ((TaskPlanner.TaskPlan?) -> Unit)? = null
-
-    private var turnsOnCurrentStep = 0
-    private var lastStepIndex = -1
 
     /**
      * 直接执行已有计划
@@ -27,6 +29,9 @@ class AgentController(
     fun executePlan(plan: TaskPlanner.TaskPlan) {
         currentPlan = plan
         history.clear()
+        stateActionHistory.clear()
+        lastUiHashForStuck = 0
+        reasoningLevel = 0
         onPlanUpdated?.invoke(plan)
         log("加载任务: ${plan.name}")
     }
@@ -36,45 +41,47 @@ class AgentController(
      */
     fun generatePlan(userRequest: String): Boolean {
         history.clear()
-        stateActionHistory.clear() // 清空历史，开始新计划
+        stateActionHistory.clear()
         lastUiHashForStuck = 0
-        val plan = taskPlanner.generatePlan(userRequest)
+        reasoningLevel = 0
+        
+        // TaskPlanner.generatePlan 需要两个参数
+        val plan = taskPlanner.generatePlan(userRequest) { msg ->
+            // 转发生成进度的原始文本到日志（或专用显示）
+            if (msg.length < 100) onLog(msg) 
+        }
+        
         currentPlan = plan
         onPlanUpdated?.invoke(plan)
-        log("生成计划: ${plan.name}")
-        return true
+        return plan != null
     }
 
     /**
-     * 阶段二：执行一步（含页面校验和变化检测）
+     * 阶段二：执行一步（含页面校验和启发式推理控制）
      */
     fun executeStep(): Boolean {
         val plan = currentPlan ?: return false
         if (plan.isCompleted()) return false
 
         try {
-            // 1. Dump UI (含变化检测)
+            // 1. 获取 UI 情况 (含 UI 变化检测)
             val uiJson = autoService.dumpUI()
             
             if (uiJson == "SAME") {
-                log("界面未变化，跳过...")
+                log("界面未变化，休眠中...")
                 Thread.sleep(2000)
                 return true
             }
 
             val currentUiHash = uiJson.hashCode()
-            
-            // 启发式逻辑优化：
-            // 检测是否在“相同界面”执行了“相同动作”
-            // 如果界面变了（比如滚动、加载），或者动作变了，就不算卡顿
             val nodeCount = countNodes(uiJson)
-            var reasoningLevel = if (nodeCount > 35) 1 else 0
             
-            // 检查历史，看当前界面是否曾遇到过
-            val isRepeatState = (currentUiHash == lastUiHashForStuck)
-            if (!isRepeatState) {
-                stateActionHistory.clear() // 界面变了，清空动作历史
+            // 启发式：重置或保持卡顿监测
+            if (currentUiHash != lastUiHashForStuck) {
+                stateActionHistory.clear()
                 lastUiHashForStuck = currentUiHash
+                // 界面变了，初步降低推理等级（除非由于节点多仍需等级1）
+                reasoningLevel = if (nodeCount > 35) 1 else 0
             }
 
             log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
@@ -87,43 +94,42 @@ class AgentController(
                 }
             }
 
-            // 3. Build prompt
+            // 3. 构建 Prompt 并调用获取操作
             val prompt = buildPrompt(uiJson, plan)
-            
-            // 4. Call LLM
             val response = llmClient.chat(listOf(
                 mapOf("role" to "system", "content" to getSystemPrompt(reasoningLevel)),
                 mapOf("role" to "user", "content" to prompt)
             ))
 
-            // 5. Parse and Execute
+            // 4. 解析响应
             val action = parseAction(response) ?: return true
             
-            // 动作特征提取（用于判断是否在原地打转）
+            // 5. 动作重复性检查（识别原地拨号）
             val actionKey = action.optString("action", "") + ":" + action.optString("b", "")
-            if (isRepeatState && stateActionHistory.contains(actionKey)) {
-                reasoningLevel = 2 // 确定在原地打转，强制深度分析
-                log("检测到动作重复! 下一轮将强制深度推理")
+            if (stateActionHistory.contains(actionKey)) {
+                reasoningLevel = 2 // 确定重复了，下一轮强制解析障碍
+                log("❗ 检测到重复动作，启用深度分析模式")
             }
             stateActionHistory.add(actionKey)
 
-            // 记录思维内容
+            // 显示思维内容
             val thought = action.optString("th", "")
             if (thought.isNotEmpty()) {
                 log("🤔 $thought")
             }
 
+            // 6. 执行物理操作
             val actionType = action.optString("action", "")
             val stepCompleted = action.optBoolean("step_completed", false)
             
-            log("执行: $actionType" + if (stepCompleted) " (步完)" else "")
+            log("动作: $actionType" + if (stepCompleted) " (步完)" else "")
             
             when (actionType) {
                 "click" -> {
                     val coords = action.optString("b", "0,0").split(",")
                     if (coords.size == 2) {
                         autoService.performClick(coords[0].toFloat(), coords[1].toFloat())
-                        addHistory("点击了 ${action.optString("b")}")
+                        addHistory("点击 $coords")
                     }
                 }
                 "back" -> autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK).also { addHistory("返回") }
@@ -143,54 +149,56 @@ class AgentController(
                 }
             }
             
+            // 7. 更新计划进度
             if (stepCompleted) {
                 plan.currentStepIndex++
                 history.clear()
+                stateActionHistory.clear() // 步骤推进，清空重复检测
                 onPlanUpdated?.invoke(plan)
-                log("下一步: ${plan.currentStep()?.description ?: "结束"}")
-                return !plan.isCompleted()
+                
+                if (plan.isCompleted()) {
+                    log("🎉 任务全部完成")
+                    return false
+                } else {
+                    log("进入下一步: ${plan.currentStep()?.description}")
+                }
             }
             
             return true
             
         } catch (e: Exception) {
-            log("错误: ${e.message}")
+            log("执行异常: ${e.message}")
             return true
         }
     }
 
-    /**
-     * 页面校验：检查界面是否包含预期关键词
-     */
     private fun validatePage(uiJson: String, keywords: List<String>): Boolean {
         val uiText = uiJson.lowercase()
-        return keywords.any { keyword ->
-            uiText.contains(keyword.lowercase())
-        }
+        return keywords.any { keyword -> uiText.contains(keyword.lowercase()) }
     }
 
     private fun getSystemPrompt(level: Int): String {
         val thinkingGuide = when(level) {
-            2 -> "⚠️检测到你已连续尝试多次未果。必须在 th 中深度分析当前界面障碍，排除路径错误，找出真正可点击的元素，不准重复错误动作。"
-            1 -> "界面较复杂。请在 th 中条理化分析目标元素位置后再行动。"
-            else -> "th简述推理(建议10字内)。"
+            2 -> "⚠️原地打转中！必须在 th 中深度分析界面障碍，找出正确元素，严禁重复上一步错误动作。"
+            1 -> "界面复杂，请在 th 中条理化分析目标元素后再操作。"
+            else -> "th简述推理(10字内)。"
         }
         
         return """Android助手。协议:
-- t:文本, d:描述, i:ID, c:类名, b:中心点(x,y), k:1(可点)
+- t:文本, d:描述, i:ID, c:类名, b:中心点(x,y), k:1(点)
 操作(JSON):
-- {"th":"思维","action":"click","b":"x,y","step_completed":布尔}
-- {"th":"思维","action":"back/wait/home/done/scroll_down/up"...}
-规则: 1.只回JSON 2.$thinkingGuide 3.优先点带t/d的元素 4.步完设step_completed:true"""
+- {"th":"想","action":"click","b":"x,y","step_completed":布尔}
+- {"th":"想","action":"back/wait/home/done/scroll_down/up"...}
+规则: 1.只回JSON 2.$thinkingGuide 3.优先点带t/d元素 4.步完设step_completed:true"""
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {
         val currentStep = plan.currentStep()
-        val historyText = if (history.isEmpty()) "" else "\n近况:${history.joinToString()}"
+        val hist = if (history.isEmpty()) "" else "\n近况:${history.joinToString()}"
         
         return """任务:${plan.task}
 进度:${plan.progress()} 目标:${currentStep?.description}
-界面:$uiJson$historyText"""
+界面:$uiJson$hist"""
     }
 
     private fun parseAction(response: String): JSONObject? {
@@ -201,16 +209,13 @@ class AgentController(
                 JSONObject(response.substring(jsonStart, jsonEnd))
             } else null
         } catch (e: Exception) {
-            Log.e("AgentController", "Failed to parse action", e)
             null
         }
     }
 
     private fun addHistory(action: String) {
         history.add(action)
-        if (history.size > maxHistorySize) {
-            history.removeAt(0)
-        }
+        if (history.size > maxHistorySize) history.removeAt(0)
     }
 
     private fun countNodes(json: String): Int {
@@ -218,22 +223,19 @@ class AgentController(
     }
 
     private fun compressUiLog(json: String): String {
-        try {
+        return try {
             val ja = JSONArray(json)
-            val sb = StringBuilder()
-            sb.append("(${ja.length()}个) ")
+            val sb = StringBuilder("(${ja.length()}个) ")
             for (i in 0 until ja.length()) {
                 val obj = ja.getJSONObject(i)
                 val txt = obj.optString("t")
                 val desc = obj.optString("d")
                 val label = if (txt.isNotEmpty()) txt else desc
-                if (label.isNotEmpty()) {
-                    sb.append("[$label] ")
-                }
+                if (label.isNotEmpty()) sb.append("[$label] ")
             }
-            return if (sb.length > 200) sb.substring(0, 200) + "..." else sb.toString()
+            if (sb.length > 200) sb.substring(0, 200) + "..." else sb.toString()
         } catch (e: Exception) {
-            return "解析错误"
+            "解析错误"
         }
     }
 
