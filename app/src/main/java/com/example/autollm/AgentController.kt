@@ -12,7 +12,8 @@ class AgentController(
     private val taskPlanner = TaskPlanner(llmClient)
     private val history = mutableListOf<String>()
     
-    private var visionEnabled = false
+    // 0: 纯文本, 1: 视觉辅助, 2: VLM端到端
+    private var visionMode = 0
     private var totalTokens = 0
     var onTokenUsage: ((Int) -> Unit)? = null
     
@@ -23,8 +24,10 @@ class AgentController(
         }
     }
     
-    fun setVisionMode(enabled: Boolean) {
-        visionEnabled = enabled
+    fun setVisionMode(mode: Int) {
+        visionMode = mode
+        llmClient.visionMode = mode
+        Log.d("AgentController", "Vision mode set to: $mode")
     }
 
     private val maxHistorySize = 5
@@ -119,12 +122,20 @@ class AgentController(
             
             // 视情况截图
             var screenshot: String? = null
-            if (visionEnabled) {
+            val useScreenshot = visionMode >= 1
+            val isEndToEnd = visionMode == 2
+            
+            if (useScreenshot) {
                 screenshot = autoService.captureScreenshotBase64()
             }
 
             // 4. 构建 Prompt 并调用获取操作
-            val promptText = buildPrompt(uiJson, plan)
+            // VLM端到端模式: 不用UI节点，纯视觉
+            val promptText = if (isEndToEnd) {
+                buildVLMPrompt(plan)
+            } else {
+                buildPrompt(uiJson, plan)
+            }
             
             val userContent: Any = if (screenshot != null) {
                 listOf(
@@ -165,21 +176,34 @@ class AgentController(
             
             when (actionType) {
                 "click" -> {
-                    val coords = action.optString("b", "0,0").split(",")
-                    if (coords.size == 2) {
-                        autoService.performClick(coords[0].toFloat(), coords[1].toFloat())
-                        addHistory("点击 $coords")
+                    // 支持两种坐标格式: b字段(文本模式) 或 x/y字段(VLM模式)
+                    val x: Float
+                    val y: Float
+                    if (action.has("x") && action.has("y")) {
+                        x = action.optDouble("x", 0.0).toFloat()
+                        y = action.optDouble("y", 0.0).toFloat()
+                    } else {
+                        val coords = action.optString("b", "0,0").split(",")
+                        x = coords.getOrNull(0)?.toFloatOrNull() ?: 0f
+                        y = coords.getOrNull(1)?.toFloatOrNull() ?: 0f
                     }
+                    autoService.performClick(x, y)
+                    addHistory("点击 ($x,$y)")
                 }
                 "input" -> {
                     val text = action.optString("text", "")
-                    val coords = action.optString("b", "").split(",")
+                    val x: Float?
+                    val y: Float?
+                    if (action.has("x") && action.has("y")) {
+                        x = action.optDouble("x", 0.0).toFloat()
+                        y = action.optDouble("y", 0.0).toFloat()
+                    } else {
+                        val coords = action.optString("b", "").split(",")
+                        x = coords.getOrNull(0)?.toFloatOrNull()
+                        y = coords.getOrNull(1)?.toFloatOrNull()
+                    }
                     if (text.isNotEmpty()) {
-                        if (coords.size == 2) {
-                            autoService.performInput(text, coords[0].toFloat(), coords[1].toFloat())
-                        } else {
-                            autoService.performInput(text)
-                        }
+                        autoService.performInput(text, x, y)
                         addHistory("输入 '$text'")
                     }
                 }
@@ -264,6 +288,25 @@ class AgentController(
         return """任务:${plan.task}
 进度:${plan.progress()} 目标:${currentStep?.description}
 界面:$uiJson$hist"""
+    }
+
+    /**
+     * VLM端到端模式的Prompt：不传UI节点，纯视觉
+     */
+    private fun buildVLMPrompt(plan: TaskPlanner.TaskPlan): String {
+        val currentStep = plan.currentStep()
+        val hist = if (history.isEmpty()) "" else "\n近况:${history.joinToString()}"
+        
+        return """你是手机操作助手。仔细观察截图，根据任务目标输出下一步操作。
+
+任务: ${plan.task}
+进度: ${plan.progress()} 
+当前目标: ${currentStep?.description}$hist
+
+直接从截图识别UI元素位置，输出像素坐标。
+格式: {"th":"思考","action":"动作","x":像素X,"y":像素Y,"text":"输入内容","step_completed":false}
+动作: click, input, back, home, wait, scroll_down/up/left/right, done
+只回JSON，步骤完成设step_completed:true"""
     }
 
     private fun parseAction(response: String): JSONObject? {

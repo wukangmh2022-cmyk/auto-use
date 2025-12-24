@@ -56,9 +56,15 @@ class AutoService : AccessibilityService() {
         }
     }
     
-    fun setVisionMode(enabled: Boolean) {
-        agentController?.setVisionMode(enabled)
-        log("视觉模式: ${if(enabled) "开启" else "关闭"}")
+    fun setVisionMode(mode: Int) {
+        agentController?.setVisionMode(mode)
+        val modeName = when(mode) {
+            0 -> "纯文本"
+            1 -> "视觉辅助"
+            2 -> "VLM端到端"
+            else -> "未知"
+        }
+        log("视觉模式: $modeName")
     }
 
     /**

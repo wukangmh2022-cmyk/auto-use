@@ -14,7 +14,15 @@ class LLMClient {
     companion object {
         private const val API_KEY_URL = "http://47.108.203.64/trans/1.txt"
         private const val LLM_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
-        private const val MODEL = "doubao-seed-1-6-lite-251015"
+        private const val MODEL_TEXT = "doubao-seed-1-6-lite-251015"
+        private const val MODEL_VISION = "doubao-seed-1-6-vision-250815"
+    }
+    
+    // 0: 纯文本, 1: 视觉辅助(用文本模型), 2: VLM端到端(用视觉模型)
+    var visionMode: Int = 0
+    
+    private fun getCurrentModel(): String {
+        return if (visionMode == 2) MODEL_VISION else MODEL_TEXT
     }
 
     private val client = OkHttpClient.Builder()
@@ -66,7 +74,7 @@ class LLMClient {
         }
         
         val requestBody = JSONObject().apply {
-            put("model", MODEL)
+            put("model", getCurrentModel())
             put("messages", messagesArray)
         }
         

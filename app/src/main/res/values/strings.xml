@@ -1,4 +1,10 @@
 <resources>
     <string name="app_name">AutoLLM</string>
     <string name="service_description">AutoLLM Automation Service</string>
+    
+    <string-array name="vision_modes">
+        <item>纯文本模式</item>
+        <item>视觉辅助</item>
+        <item>VLM端到端</item>
+    </string-array>
 </resources>

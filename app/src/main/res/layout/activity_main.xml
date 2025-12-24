@@ -44,13 +44,26 @@
         </LinearLayout>
     </LinearLayout>
 
-    <CheckBox
-        android:id="@+id/cbVisionMode"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="👁️ 启用视觉辅助 (Beta)"
-        android:textSize="12sp"
-        android:layout_marginTop="2dp"/>
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="2dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="视觉模式:"
+            android:textSize="12sp" />
+
+        <Spinner
+            android:id="@+id/spVisionMode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:entries="@array/vision_modes" />
+    </LinearLayout>
 
     <Button
         android:id="@+id/btnOpenSettings"

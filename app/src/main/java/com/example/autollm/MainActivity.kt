@@ -21,7 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvPlan: TextView
     private lateinit var tvLog: TextView
     private lateinit var tvTokenStats: TextView 
-    private lateinit var cbVisionMode: CheckBox 
+    private lateinit var spVisionMode: Spinner 
     private lateinit var scrollLog: ScrollView
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
@@ -59,7 +59,7 @@ class MainActivity : AppCompatActivity() {
         tvPlan = findViewById(R.id.tvPlan)
         tvLog = findViewById(R.id.tvLog)
         tvTokenStats = findViewById(R.id.tvTokenStats)
-        cbVisionMode = findViewById(R.id.cbVisionMode)
+        spVisionMode = findViewById(R.id.spVisionMode)
         scrollLog = findViewById(R.id.scrollLog)
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
@@ -82,8 +82,11 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         
-        cbVisionMode.setOnCheckedChangeListener { _, isChecked ->
-            AutoService.instance?.setVisionMode(isChecked)
+        spVisionMode.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                AutoService.instance?.setVisionMode(position)
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
         }
         
         // Callback for token stats
