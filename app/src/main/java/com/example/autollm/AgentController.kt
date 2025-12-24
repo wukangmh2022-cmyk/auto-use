@@ -211,18 +211,22 @@ class AgentController(
 
     private fun getSystemPrompt(level: Int, hasVision: Boolean = false): String {
         val thinkingGuide = when(level) {
-            2 -> "⚠️原地打转中！必须在 th 中深度分析界面障碍，找出正确元素，严禁重复上一步错误动作。"
-            1 -> "界面复杂，请在 th 中条理化分析目标元素后再操作。"
-            else -> "th简述推理(10字内)。"
+            2 -> "⚠️卡顿中！必须反思为何失败，尝试不同路径（如先home/back）。"
+            1 -> "分析当前界面布局，定位目标。"
+            else -> "简述意图。"
         }
-        val visionGuide = if (hasVision) "5.参考截图补充界面细节。" else ""
+        val visionGuide = if (hasVision) "4.视觉模式：参考截图补充XML缺失的细节（如无障碍标签丢失的图标）。" else ""
         
-        return """Android助手。协议:
-- t:文本, d:描述, i:ID, c:类名, b:中心点(x,y), k:1(点)
-操作(JSON):
-- {"th":"想","action":"click","b":"x,y","step_completed":布尔}
-- {"th":"想","action":"back/wait/home/done/scroll_down/up"...}
-规则: 1.只回JSON 2.$thinkingGuide 3.优先点带t/d元素 4.步完设step_completed:true $visionGuide"""
+        return """Android操作助手。
+协议: t:文本, d:无障碍描述, i:ID, c:类名, b:坐标, k:可点
+操作: {"th":"思考","action":"click","b":"x,y","step_completed":false}
+(action支持: click, back, home, wait, scroll_down, scroll_up, done)
+策略:
+1. 打开应用 -> 必先 action:"home"。
+2. 找不到目标 -> 尝试 scroll_down 或 back。
+3. 优先利用 t(text) 和 d(desc) 定位。
+$visionGuide
+要求: 1.只回JSON 2.th字段:$thinkingGuide 3.步完设step_completed:true"""
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {
