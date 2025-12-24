@@ -102,7 +102,14 @@ class AgentController(
 
             log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
 
-            // 2. 页面校验
+            // 2. 规则驱动的弹窗预处理（不经过LLM，省Token+避免误点）
+            val popupHandled = handlePopupsRuleBased(uiJson)
+            if (popupHandled) {
+                log("🔧 自动处理了弹窗，继续执行")
+                return true // 处理完弹窗后重新获取界面
+            }
+
+            // 3. 页面校验
             val currentStep = plan.currentStep()
             if (currentStep != null && currentStep.expectedKeywords.isNotEmpty()) {
                 if (!validatePage(uiJson, currentStep.expectedKeywords)) {
@@ -116,7 +123,7 @@ class AgentController(
                 screenshot = autoService.captureScreenshotBase64()
             }
 
-            // 3. 构建 Prompt 并调用获取操作
+            // 4. 构建 Prompt 并调用获取操作
             val promptText = buildPrompt(uiJson, plan)
             
             val userContent: Any = if (screenshot != null) {
@@ -237,6 +244,8 @@ class AgentController(
 - 桌面找App:先左右翻页2次,还没找到再下拉搜索
 - 列表找不到->scroll_down/up
 - 输入框->先click再input
+- 登录流程:账号->密码->登录按钮
+- 看到"加载中"->wait 2秒
 - 多次失败->换路径或搜索""" else ""
 
         // Level 2: 强制换策略提示
@@ -298,5 +307,73 @@ class AgentController(
     private fun log(msg: String) {
         Log.d("AgentController", msg)
         onLog(msg)
+    }
+
+    /**
+     * 规则驱动的弹窗处理（不经过LLM）
+     * 返回 true 表示处理了弹窗，需要重新获取界面
+     */
+    private fun handlePopupsRuleBased(uiJson: String): Boolean {
+        try {
+            val nodes = JSONArray(uiJson)
+            
+            // 关闭/取消类弹窗关键词（优先级从高到低）
+            val dismissKeywords = listOf(
+                "跳过", "关闭", "取消", "不再提示", "稍后", "暂不", "我知道了",
+                "以后再说", "不允许", "拒绝", "下次再说", "Skip", "Close", "Cancel", "Deny"
+            )
+            
+            // 允许类按钮（权限请求中优先点击）
+            val allowKeywords = listOf("允许", "同意", "确定", "好的", "继续", "Allow", "OK", "Accept")
+            
+            // 广告/推广类关键词（需要关闭）
+            val adIndicators = listOf("广告", "推荐", "立即领取", "限时", "优惠", "红包", "福利")
+            
+            // 遍历节点，查找弹窗
+            for (i in 0 until nodes.length()) {
+                val node = nodes.getJSONObject(i)
+                val text = node.optString("t", "").lowercase()
+                val desc = node.optString("d", "").lowercase()
+                val coords = node.optString("b", "")
+                val isClickable = node.optInt("k", 0) == 1
+                
+                if (!isClickable || coords.isEmpty()) continue
+                
+                val fullText = "$text $desc"
+                
+                // 检查是否是关闭/取消按钮
+                for (keyword in dismissKeywords) {
+                    if (fullText.contains(keyword.lowercase())) {
+                        val xy = coords.split(",")
+                        if (xy.size == 2) {
+                            log("🔧 自动关闭弹窗: $keyword")
+                            autoService.performClick(xy[0].toFloat(), xy[1].toFloat())
+                            Thread.sleep(500)
+                            return true
+                        }
+                    }
+                }
+            }
+            
+            // 检查是否有通知栏消息覆盖（通常在顶部）
+            // 如果检测到类似通知的元素，向上滑动清除
+            for (i in 0 until nodes.length()) {
+                val node = nodes.getJSONObject(i)
+                val coords = node.optString("b", "")
+                if (coords.isEmpty()) continue
+                
+                val xy = coords.split(",")
+                if (xy.size == 2) {
+                    val y = xy[1].toFloatOrNull() ?: continue
+                    // 如果有可点击元素在屏幕最顶部（y < 100），可能是通知
+                    // 这里不自动处理，因为可能误伤状态栏
+                }
+            }
+            
+            return false
+        } catch (e: Exception) {
+            Log.e("AgentController", "Popup detection error", e)
+            return false
+        }
     }
 }
