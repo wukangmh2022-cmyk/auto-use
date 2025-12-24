@@ -56,7 +56,6 @@ class MainActivity : AppCompatActivity() {
         llSavedTasks = findViewById(R.id.llSavedTasks)
         
         val btnOpenSettings = findViewById<Button>(R.id.btnOpenSettings)
-        val btnClearLog = findViewById<Button>(R.id.btnClearLog)
 
         btnOpenSettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
