@@ -361,10 +361,13 @@ $scheduleText
     private fun updateStatus() {
         val service = AutoService.instance
         val statusText = when {
-            service == null -> "无障碍未开启"
-            AutoService.isRunning -> "执行中..."
-            pendingPlan != null -> "待确认"
-            else -> "已就绪"
+            service != null -> {
+                if (AutoService.isRunning) "执行中..."
+                else if (pendingPlan != null) "待确认"
+                else "已就绪"
+            }
+            isAccessibilityServiceEnabled() -> "服务假死:请去设置重启无障碍"
+            else -> "无障碍未开启"
         }
         tvStatus.text = statusText
         
