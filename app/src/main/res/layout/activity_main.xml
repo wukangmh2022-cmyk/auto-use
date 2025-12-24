@@ -85,16 +85,6 @@
             android:text="生成计划" />
 
         <Button
-            android:id="@+id/btnConfirm"
-            android:layout_width="0dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="4dp"
-            android:layout_weight="1"
-            android:enabled="false"
-            android:textSize="12sp"
-            android:text="确认执行" />
-
-        <Button
             android:id="@+id/btnStop"
             android:layout_width="0dp"
             android:layout_height="40dp"
@@ -156,7 +146,7 @@
         android:text="等待生成计划..."
         android:textSize="11sp" />
 
-    <!-- 修改区域 -->
+    <!-- 计划操作区域 (生成后显示) -->
     <LinearLayout
         android:id="@+id/llModifyContainer"
         android:layout_width="match_parent"
@@ -164,6 +154,17 @@
         android:orientation="vertical"
         android:visibility="gone">
 
+        <!-- 确认执行按钮 -->
+        <Button
+            android:id="@+id/btnConfirm"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="4dp"
+            android:text="✅ 确认执行"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- 修改入口 -->
         <TextView
             android:id="@+id/btnModify"
             android:layout_width="wrap_content"
