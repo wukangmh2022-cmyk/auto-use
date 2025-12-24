@@ -234,7 +234,7 @@ class AgentController(
         val strategyPrompt = if (level >= 1) """
 策略:
 - 打开应用->先home
-- 桌面找不到->scroll_left/right翻页
+- 桌面找App:先左右翻页2次,还没找到再下拉搜索
 - 列表找不到->scroll_down/up
 - 输入框->先click再input
 - 多次失败->换路径或搜索""" else ""
