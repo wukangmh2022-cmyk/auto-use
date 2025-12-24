@@ -139,8 +139,8 @@ class AgentController(
                     Thread.sleep(sec * 1000L)
                     addHistory("等待 ${sec}s")
                 }
-                "scroll_down" -> autoService.performSwipe(540f, 1500f, 540f, 500f).also { addHistory("下滑") }
-                "scroll_up" -> autoService.performSwipe(540f, 500f, 540f, 1500f).also { addHistory("上滑") }
+                "scroll_down" -> autoService.performSwipe(540f, 500f, 540f, 1500f).also { addHistory("下滑") }
+                "scroll_up" -> autoService.performSwipe(540f, 1500f, 540f, 500f).also { addHistory("上滑") }
                 "done" -> {
                     log("任务完成: ${action.optString("r", "完成")}")
                     currentPlan = null
