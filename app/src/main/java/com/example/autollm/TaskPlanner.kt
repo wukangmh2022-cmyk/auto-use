@@ -90,6 +90,7 @@ class TaskPlanner(private val llmClient: LLMClient) {
 2. 每个步骤应该对应一个明确的界面操作
 3. expectedKeywords 用于校验是否在正确页面（填写该页面应该出现的文字）
 4. 步骤数量控制在 3-10 步
+6. 描述步骤时不要画蛇添足描述图标颜色、形状（如“点击红心”），直接说功能（如“点击点赞”）即可，省token
 5. 只输出 JSON，不要有其他文字
 
 【输出格式】
@@ -98,7 +99,7 @@ class TaskPlanner(private val llmClient: LLMClient) {
   "task": "任务完整描述",
   "steps": [
     {
-      "description": "步骤描述",
+      "description": "简练的操作描述（无视觉形容词）",
       "expectedKeywords": ["关键词1", "关键词2"]
     }
   ]
@@ -128,6 +129,8 @@ class TaskPlanner(private val llmClient: LLMClient) {
 1. 保持原计划中合理的部分，仅修改不合理或用户指出的部分
 2. 格式与原计划完全一致，只输出 JSON
 3. 步骤数量控制在 3-10 步
+4. 描述步骤时不要画蛇添足描述图标颜色、形状，直接说功能即可
+5. 这很重要：不要修改原计划中正确的步骤描述，除非用户明确要求
 
 【输出格式】
 {
@@ -135,7 +138,7 @@ class TaskPlanner(private val llmClient: LLMClient) {
   "task": "任务完整描述",
   "steps": [
     {
-      "description": "步骤描述",
+      "description": "简练的操作描述（无视觉形容词）",
       "expectedKeywords": ["关键词"]
     }
   ]
