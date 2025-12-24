@@ -107,37 +107,84 @@ class TaskPlanner(private val llmClient: LLMClient) {
         val userPrompt = "用户需求：$userRequest"
 
         return try {
-            val accumulatedText = StringBuilder()
-            
-            // 使用流式调用
-            val response = llmClient.streamChat(listOf(
-                mapOf("role" to "system", "content" to systemPrompt),
-                mapOf("role" to "user", "content" to userPrompt)
-            )) { token ->
-                accumulatedText.append(token)
-                onProgress(accumulatedText.toString())
-            }
-            
-            onProgress(response) // 确保最后显示完整的
-            
-            val jsonStart = response.indexOf("{")
-            val jsonEnd = response.lastIndexOf("}") + 1
-            if (jsonStart >= 0 && jsonEnd > jsonStart) {
-                val jsonStr = response.substring(jsonStart, jsonEnd)
-                val json = JSONObject(jsonStr)
-                
-                json.put("id", System.currentTimeMillis().toString())
-                
-                val plan = TaskPlan.fromJson(json)
-                plan
-            } else {
-                onProgress("\n无法解析 JSON")
-                null
-            }
+            callLLM(systemPrompt, userPrompt, onProgress)
         } catch (e: Exception) {
             onProgress("\n生成失败: ${e.message}")
             Log.e("TaskPlanner", "Failed to generate plan", e)
             null
+        }
+    }
+
+    /**
+     * 根据用户反馈修正现有计划
+     */
+    fun refinePlan(currentPlan: TaskPlan, userFeedback: String, onProgress: (String) -> Unit): TaskPlan? {
+        onProgress("正在根据反馈修正计划...\n")
+
+        val systemPrompt = """你是一个 Android 手机自动化任务规划师。
+用户对之前的计划提出了修改意见。请根据原计划和用户反馈，生成一个新的修正版计划。
+
+【规则】
+1. 保持原计划中合理的部分，仅修改不合理或用户指出的部分
+2. 格式与原计划完全一致，只输出 JSON
+3. 步骤数量控制在 3-10 步
+
+【输出格式】
+{
+  "name": "任务简称",
+  "task": "任务完整描述",
+  "steps": [
+    {
+      "description": "步骤描述",
+      "expectedKeywords": ["关键词"]
+    }
+  ]
+}"""
+
+        val userPrompt = """原计划:
+${currentPlan.toJson()}
+
+用户反馈:
+$userFeedback
+
+请输出修正后的 JSON 计划。"""
+
+        return try {
+            callLLM(systemPrompt, userPrompt, onProgress)
+        } catch (e: Exception) {
+            onProgress("\n修正失败: ${e.message}")
+            Log.e("TaskPlanner", "Failed to refine plan", e)
+            null
+        }
+    }
+
+    private fun callLLM(sys: String, user: String, onProgress: (String) -> Unit): TaskPlan? {
+        val accumulatedText = StringBuilder()
+        
+        val response = llmClient.streamChat(listOf(
+            mapOf("role" to "system", "content" to sys),
+            mapOf("role" to "user", "content" to user)
+        )) { token ->
+            accumulatedText.append(token)
+            onProgress(accumulatedText.toString())
+        }
+        
+        onProgress(response)
+        
+        val jsonStart = response.indexOf("{")
+        val jsonEnd = response.lastIndexOf("}") + 1
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            val jsonStr = response.substring(jsonStart, jsonEnd)
+            val json = JSONObject(jsonStr)
+            
+            // 保持 ID 不变或生成新的? 这里生成新的比较稳妥，或者沿用旧的看需求。
+            // 还是生成新的吧，当做一个全新计划。
+            json.put("id", System.currentTimeMillis().toString())
+            
+            return TaskPlan.fromJson(json)
+        } else {
+            onProgress("\n无法解析 JSON")
+            return null
         }
     }
 }

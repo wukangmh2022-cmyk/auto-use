@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStop: Button
     private lateinit var btnSave: Button
     private lateinit var btnConfirm: Button
+    private lateinit var btnModify: Button // NEW
     private lateinit var etRequest: EditText
     private lateinit var llSavedTasks: LinearLayout
     
@@ -52,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         btnStop = findViewById(R.id.btnStop)
         btnSave = findViewById(R.id.btnSave)
         btnConfirm = findViewById(R.id.btnConfirm)
+        btnModify = findViewById(R.id.btnModify) // NEW
         etRequest = findViewById(R.id.etRequest)
         llSavedTasks = findViewById(R.id.llSavedTasks)
         
@@ -79,6 +81,9 @@ class MainActivity : AppCompatActivity() {
             logBuilder.clear()
             tvLog.text = ""
             btnStart.isEnabled = false
+            btnConfirm.isEnabled = false
+            btnSave.isEnabled = false
+            btnModify.isEnabled = false
             
             // 只生成计划，不执行
             Thread {
@@ -101,7 +106,8 @@ class MainActivity : AppCompatActivity() {
                         updatePlanDisplay(plan)
                         btnConfirm.isEnabled = true
                         btnSave.isEnabled = true
-                        appendLog("计划已生成，请确认后执行")
+                        btnModify.isEnabled = true // Enable modify button
+                        appendLog("计划已生成，请确认或修改")
                     } else {
                         tvPlan.text = "计划生成失败，请重试"
                     }
@@ -127,6 +133,26 @@ class MainActivity : AppCompatActivity() {
             pendingPlan = null
             btnConfirm.isEnabled = false
             updateUI(true)
+        }
+
+        // 修改计划
+        btnModify.setOnClickListener {
+            val plan = pendingPlan
+            if (plan == null) return@setOnClickListener
+            
+            val input = EditText(this)
+            AlertDialog.Builder(this)
+                .setTitle("修改计划")
+                .setMessage("请输入修改意见（如：第2步不对...）")
+                .setView(input)
+                .setPositiveButton("提交") { _, _ ->
+                    val feedback = input.text.toString()
+                    if (feedback.isNotEmpty()) {
+                        performRefinePlan(plan, feedback)
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
         }
 
         btnStop.setOnClickListener {
@@ -309,10 +335,47 @@ $scheduleText
         btnStop.isEnabled = AutoService.isRunning
     }
 
+    private fun performRefinePlan(currentPlan: TaskPlanner.TaskPlan, feedback: String) {
+        tvPlan.text = "正在根据反馈修正计划..."
+        logBuilder.clear()
+        tvLog.text = ""
+        btnStart.isEnabled = false
+        btnConfirm.isEnabled = false
+        btnSave.isEnabled = false
+        btnModify.isEnabled = false
+        
+        Thread {
+            val planner = TaskPlanner(LLMClient())
+            val newPlan = planner.refinePlan(currentPlan, feedback) { partialText ->
+                val cleanText = partialText.replace("\\n", "\n")
+                handler.post { tvPlan.text = cleanText }
+            }
+            
+            handler.post {
+                btnStart.isEnabled = true
+                if (newPlan != null) {
+                    pendingPlan = newPlan
+                    updatePlanDisplay(newPlan)
+                    btnConfirm.isEnabled = true
+                    btnSave.isEnabled = true
+                    btnModify.isEnabled = true
+                    appendLog("计划已修正，请确认")
+                } else {
+                    tvPlan.text = "修正失败，请重试。\n原计划保持不变。"
+                    updatePlanDisplay(currentPlan) // Restore old plan display
+                    btnConfirm.isEnabled = true
+                    btnSave.isEnabled = true
+                    btnModify.isEnabled = true
+                }
+            }
+        }.start()
+    }
+
     private fun updateUI(running: Boolean) {
         btnStart.isEnabled = !running
         btnStop.isEnabled = running
         btnConfirm.isEnabled = !running && pendingPlan != null
+        btnModify.isEnabled = !running && pendingPlan != null
     }
 
     private fun appendLog(msg: String) {
