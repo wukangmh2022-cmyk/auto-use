@@ -218,6 +218,32 @@ class AgentController(
                 "scroll_up" -> autoService.performSwipe(540f, 1500f, 540f, 500f).also { addHistory("上滑") }
                 "scroll_left" -> autoService.performSwipe(900f, 1000f, 180f, 1000f).also { addHistory("左滑") }
                 "scroll_right" -> autoService.performSwipe(180f, 1000f, 900f, 1000f).also { addHistory("右滑") }
+                "long_press" -> {
+                    // 支持 x/y 或 b 坐标格式，以及 duration 参数
+                    val x: Float
+                    val y: Float
+                    if (action.has("x") && action.has("y")) {
+                        x = action.optDouble("x", 0.0).toFloat()
+                        y = action.optDouble("y", 0.0).toFloat()
+                    } else {
+                        val coords = action.optString("b", "0,0").split(",")
+                        x = coords.getOrNull(0)?.toFloatOrNull() ?: 0f
+                        y = coords.getOrNull(1)?.toFloatOrNull() ?: 0f
+                    }
+                    val durationMs = action.optLong("duration", 1000)
+                    autoService.performLongPress(x, y, durationMs)
+                    addHistory("长按 ($x,$y) ${durationMs}ms")
+                }
+                "drag" -> {
+                    // 从起点拖到终点
+                    val startX = action.optDouble("x", 0.0).toFloat()
+                    val startY = action.optDouble("y", 0.0).toFloat()
+                    val endX = action.optDouble("endX", 0.0).toFloat()
+                    val endY = action.optDouble("endY", 0.0).toFloat()
+                    val durationMs = action.optLong("duration", 800)
+                    autoService.performDrag(startX, startY, endX, endY, durationMs)
+                    addHistory("拖动 ($startX,$startY)->($endX,$endY)")
+                }
                 "done" -> {
                     log("任务完成: ${action.optString("r", "完成")}")
                     currentPlan = null
@@ -304,9 +330,14 @@ class AgentController(
 当前目标: ${currentStep?.description}$hist
 
 直接从截图识别UI元素位置，输出像素坐标。
-格式: {"th":"思考","action":"动作","x":像素X,"y":像素Y,"text":"输入内容","step_completed":false}
-动作: click, input, back, home, wait, scroll_down/up/left/right, done
-只回JSON，步骤完成设step_completed:true"""
+格式: {"th":"思考","action":"动作","x":像素X,"y":像素Y,...}
+动作列表:
+- click: 点击 {"action":"click","x":100,"y":200}
+- long_press: 长按 {"action":"long_press","x":100,"y":200,"duration":1000}
+- drag: 拖动 {"action":"drag","x":100,"y":200,"endX":300,"endY":400,"duration":800}
+- input: 输入 {"action":"input","x":100,"y":200,"text":"内容"}
+- back/home/wait/scroll_down/up/left/right/done
+完成步骤时设step_completed:true。只回JSON。"""
     }
 
     private fun parseAction(response: String): JSONObject? {

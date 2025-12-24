@@ -220,13 +220,44 @@ class AutoService : AccessibilityService() {
         dispatchGesture(builder.build(), null, null)
     }
     
-    fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float) {
-        Log.d("AutoService", "Swiping from ($startX, $startY) to ($endX, $endY)")
+    fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float, durationMs: Long = 500) {
+        Log.d("AutoService", "Swiping from ($startX, $startY) to ($endX, $endY) in ${durationMs}ms")
         val path = Path()
         path.moveTo(startX, startY)
         path.lineTo(endX, endY)
         val builder = GestureDescription.Builder()
-        builder.addStroke(GestureDescription.StrokeDescription(path, 0, 500))
+        builder.addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
+        dispatchGesture(builder.build(), null, null)
+    }
+    
+    /**
+     * 长按操作
+     * @param x 坐标
+     * @param y 坐标
+     * @param durationMs 按住时长（毫秒），默认1000ms
+     */
+    fun performLongPress(x: Float, y: Float, durationMs: Long = 1000) {
+        Log.d("AutoService", "Long pressing at $x, $y for ${durationMs}ms")
+        val path = Path()
+        path.moveTo(x, y)
+        val builder = GestureDescription.Builder()
+        builder.addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
+        dispatchGesture(builder.build(), null, null)
+    }
+    
+    /**
+     * 拖动操作（从一点拖到另一点）
+     * @param startX/Y 起始点
+     * @param endX/Y 终点
+     * @param durationMs 拖动时长，默认800ms
+     */
+    fun performDrag(startX: Float, startY: Float, endX: Float, endY: Float, durationMs: Long = 800) {
+        Log.d("AutoService", "Dragging from ($startX, $startY) to ($endX, $endY) in ${durationMs}ms")
+        val path = Path()
+        path.moveTo(startX, startY)
+        path.lineTo(endX, endY)
+        val builder = GestureDescription.Builder()
+        builder.addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
         dispatchGesture(builder.build(), null, null)
     }
 
