@@ -156,9 +156,14 @@ class MainActivity : AppCompatActivity() {
 
         // 确认并执行
         btnConfirm.setOnClickListener {
+            if (!isAccessibilityServiceEnabled()) {
+                Toast.makeText(this, "请先开启无障碍服务", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
             val service = AutoService.instance
             if (service == null) {
-                Toast.makeText(this, "请先开启无障碍服务", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "服务已开启但未就绪，请稍后重试", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             
@@ -439,6 +444,12 @@ $scheduleText
     override fun onResume() {
         super.onResume()
         refreshSavedTasks()
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val am = getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        val enabledServices = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        return enabledServices.any { it.id.contains("AutoService") }
     }
 
     override fun onDestroy() {

@@ -103,7 +103,11 @@ class AgentController(
                 reasoningLevel = if (nodeCount > 35) 1 else 0
             }
 
-            log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
+            if (visionMode == 2) {
+                log("[${plan.progress()}] VLM模式: 端到端视觉分析中...")
+            } else {
+                log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
+            }
 
             // 2. 规则驱动的弹窗预处理（不经过LLM，省Token+避免误点）
             val popupHandled = handlePopupsRuleBased(uiJson)
