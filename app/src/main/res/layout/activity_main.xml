@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="API Key:"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/etApiKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Enter LLM API Key"
+        android:inputType="textPassword" />
+
+    <Button
+        android:id="@+id/btnSaveConfig"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Save Configuration" />
+
+    <Button
+        android:id="@+id/btnOpenSettings"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Enable Accessibility Service" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="JavaScript Logic:"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/etScript"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="top|start"
+        android:hint="// Write your JS automation logic here..."
+        android:inputType="textMultiLine"
+        android:scrollbars="vertical" />
+
+    <Button
+        android:id="@+id/btnUpdateScript"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Update Script" />
+
+</LinearLayout>

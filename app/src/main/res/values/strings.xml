@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AutoLLM</string>
+    <string name="service_description">AutoLLM Automation Service</string>
+</resources>
