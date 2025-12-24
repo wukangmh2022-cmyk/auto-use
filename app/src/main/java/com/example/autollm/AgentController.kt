@@ -36,6 +36,16 @@ class AgentController(
      */
     fun generatePlan(userRequest: String): Boolean {
         history.clear()
+        stateActionHistory.clear() // 清空历史，开始新计划
+        lastUiHashForStuck = 0
+        val plan = taskPlanner.generatePlan(userRequest)
+        currentPlan = plan
+        onPlanUpdated?.invoke(plan)
+        log("生成计划: ${plan.name}")
+        return true
+    }
+
+    /**
      * 阶段二：执行一步（含页面校验和变化检测）
      */
     fun executeStep(): Boolean {
@@ -47,29 +57,24 @@ class AgentController(
             val uiJson = autoService.dumpUI()
             
             if (uiJson == "SAME") {
-                log("界面未变化，跳过本次请求...")
-                Thread.sleep(2000) // 界面没变时多等一会儿
+                log("界面未变化，跳过...")
+                Thread.sleep(2000)
                 return true
             }
 
-            // 监测进度以启用“启发式深度思考”
-            if (plan.currentStepIndex == lastStepIndex) {
-                turnsOnCurrentStep++
-            } else {
-                turnsOnCurrentStep = 0
-                lastStepIndex = plan.currentStepIndex
-            }
-
-            // 启发式逻辑：如果同一步骤执行了 2 次以上，或者界面节点很多，则开启深度思考
+            val currentUiHash = uiJson.hashCode()
+            
+            // 启发式逻辑优化：
+            // 检测是否在“相同界面”执行了“相同动作”
+            // 如果界面变了（比如滚动、加载），或者动作变了，就不算卡顿
             val nodeCount = countNodes(uiJson)
-            val reasoningLevel = when {
-                turnsOnCurrentStep >= 2 -> 2 // 严重卡顿：必须深度思考
-                nodeCount > 30 -> 1         // 界面复杂：建议多想想
-                else -> 0                   // 正常
-            }
-
-            if (reasoningLevel > 0) {
-                log("启发式模式: 等级 $reasoningLevel (卡顿:$turnsOnCurrentStep, 节点:$nodeCount)")
+            var reasoningLevel = if (nodeCount > 35) 1 else 0
+            
+            // 检查历史，看当前界面是否曾遇到过
+            val isRepeatState = (currentUiHash == lastUiHashForStuck)
+            if (!isRepeatState) {
+                stateActionHistory.clear() // 界面变了，清空动作历史
+                lastUiHashForStuck = currentUiHash
             }
 
             log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
@@ -94,6 +99,14 @@ class AgentController(
             // 5. Parse and Execute
             val action = parseAction(response) ?: return true
             
+            // 动作特征提取（用于判断是否在原地打转）
+            val actionKey = action.optString("action", "") + ":" + action.optString("b", "")
+            if (isRepeatState && stateActionHistory.contains(actionKey)) {
+                reasoningLevel = 2 // 确定在原地打转，强制深度分析
+                log("检测到动作重复! 下一轮将强制深度推理")
+            }
+            stateActionHistory.add(actionKey)
+
             // 记录思维内容
             val thought = action.optString("th", "")
             if (thought.isNotEmpty()) {
