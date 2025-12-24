@@ -23,39 +23,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cbVisionMode: CheckBox // NEW
     private lateinit var scrollLog: ScrollView
     private lateinit var btnStart: Button
-    
-    // ...
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        taskRepository = TaskRepository(this)
-        taskScheduler = TaskScheduler(this)
-
-        tvStatus = findViewById(R.id.tvStatus)
-        tvPlan = findViewById(R.id.tvPlan)
-        tvLog = findViewById(R.id.tvLog)
-        tvTokenStats = findViewById(R.id.tvTokenStats) // NEW
-        cbVisionMode = findViewById(R.id.cbVisionMode) // NEW
-        scrollLog = findViewById(R.id.scrollLog)
-        
-        // ... (rest of init)
-        
-        cbVisionMode.setOnCheckedChangeListener { _, isChecked ->
-            AutoService.instance?.setVisionMode(isChecked)
-        }
-        
-        // ...
-        
-        // Callback for token stats
-        AutoService.onTokenUpdateCallback = { totalTokens ->
-            handler.post {
-                val cost = totalTokens * 0.000003 // Est 3 RMB / 1M
-                val costStr = String.format("%.4f", cost)
-                tvTokenStats.text = "Token: $totalTokens (¥$costStr)"
-            }
-        }
     private lateinit var btnStop: Button
     private lateinit var btnSave: Button
     private lateinit var btnConfirm: Button
@@ -83,6 +50,8 @@ class MainActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
         tvPlan = findViewById(R.id.tvPlan)
         tvLog = findViewById(R.id.tvLog)
+        tvTokenStats = findViewById(R.id.tvTokenStats) // NEW
+        cbVisionMode = findViewById(R.id.cbVisionMode) // NEW
         scrollLog = findViewById(R.id.scrollLog)
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
@@ -96,6 +65,19 @@ class MainActivity : AppCompatActivity() {
 
         btnOpenSettings.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        
+        cbVisionMode.setOnCheckedChangeListener { _, isChecked ->
+            AutoService.instance?.setVisionMode(isChecked)
+        }
+        
+        // Callback for token stats
+        AutoService.onTokenUpdateCallback = { totalTokens ->
+            handler.post {
+                val cost = totalTokens * 0.000003 // Est 3 RMB / 1M
+                val costStr = String.format("%.4f", cost)
+                tvTokenStats.text = "Token: $totalTokens (¥$costStr)"
+            }
         }
 
         // 生成计划（不自动执行）
