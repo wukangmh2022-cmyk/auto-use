@@ -18,6 +18,9 @@ class AgentController(
     
     var onPlanUpdated: ((TaskPlanner.TaskPlan?) -> Unit)? = null
 
+    private var turnsOnCurrentStep = 0
+    private var lastStepIndex = -1
+
     /**
      * 直接执行已有计划
      */
@@ -49,6 +52,26 @@ class AgentController(
                 return true
             }
 
+            // 监测进度以启用“启发式深度思考”
+            if (plan.currentStepIndex == lastStepIndex) {
+                turnsOnCurrentStep++
+            } else {
+                turnsOnCurrentStep = 0
+                lastStepIndex = plan.currentStepIndex
+            }
+
+            // 启发式逻辑：如果同一步骤执行了 2 次以上，或者界面节点很多，则开启深度思考
+            val nodeCount = countNodes(uiJson)
+            val reasoningLevel = when {
+                turnsOnCurrentStep >= 2 -> 2 // 严重卡顿：必须深度思考
+                nodeCount > 30 -> 1         // 界面复杂：建议多想想
+                else -> 0                   // 正常
+            }
+
+            if (reasoningLevel > 0) {
+                log("启发式模式: 等级 $reasoningLevel (卡顿:$turnsOnCurrentStep, 节点:$nodeCount)")
+            }
+
             log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
 
             // 2. 页面校验
@@ -64,7 +87,7 @@ class AgentController(
             
             // 4. Call LLM
             val response = llmClient.chat(listOf(
-                mapOf("role" to "system", "content" to getSystemPrompt()),
+                mapOf("role" to "system", "content" to getSystemPrompt(reasoningLevel)),
                 mapOf("role" to "user", "content" to prompt)
             ))
 
@@ -133,13 +156,19 @@ class AgentController(
         }
     }
 
-    private fun getSystemPrompt(): String {
+    private fun getSystemPrompt(level: Int): String {
+        val thinkingGuide = when(level) {
+            2 -> "⚠️检测到你已连续尝试多次未果。必须在 th 中深度分析当前界面障碍，排除路径错误，找出真正可点击的元素，不准重复错误动作。"
+            1 -> "界面较复杂。请在 th 中条理化分析目标元素位置后再行动。"
+            else -> "th简述推理(建议10字内)。"
+        }
+        
         return """Android助手。协议:
 - t:文本, d:描述, i:ID, c:类名, b:中心点(x,y), k:1(可点)
 操作(JSON):
 - {"th":"思维","action":"click","b":"x,y","step_completed":布尔}
 - {"th":"思维","action":"back/wait/home/done/scroll_down/up"...}
-规则: 1.只回JSON 2.th简述推理(建议10字内) 3.优先点带t/d的元素 4.步完设step_completed:true"""
+规则: 1.只回JSON 2.$thinkingGuide 3.优先点带t/d的元素 4.步完设step_completed:true"""
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {
