@@ -274,8 +274,16 @@ class AutoService : AccessibilityService() {
             val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             val clip = android.content.ClipData.newPlainText("input", text)
             clipboard.setPrimaryClip(clip)
-            // 模拟粘贴
-            return performGlobalAction(GLOBAL_ACTION_PASTE)
+            
+            // 找到当前焦点节点并执行粘贴
+            val root = rootInActiveWindow ?: return false
+            val focusedNode = findFocusedInput(root)
+            if (focusedNode != null) {
+                val result = focusedNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                focusedNode.recycle()
+                return result
+            }
+            return false
         } catch (e: Exception) {
             Log.e("AutoService", "Paste failed", e)
             return false
