@@ -9,7 +9,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.util.Log
 import android.os.Handler
 import android.os.Looper
-import android.content.Intent
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,10 +16,11 @@ class AutoService : AccessibilityService() {
 
     companion object {
         var instance: AutoService? = null
-        private set
+            private set
         
         var isRunning = false
         var onLogCallback: ((String) -> Unit)? = null
+        var onPlanCallback: ((TaskPlanner.TaskPlan?) -> Unit)? = null
     }
 
     private var agentController: AgentController? = null
@@ -35,25 +35,45 @@ class AutoService : AccessibilityService() {
         agentController = AgentController(this) { msg ->
             onLogCallback?.invoke(msg)
         }
+        
+        agentController?.onPlanUpdated = { plan ->
+            handler.post { onPlanCallback?.invoke(plan) }
+        }
     }
 
-    fun startAgent(goal: String) {
+    fun startAgent(userRequest: String) {
         if (isRunning) return
-        isRunning = true
         
-        agentController?.setGoal(goal)
-        log("Agent 启动")
+        log("开始处理: $userRequest")
         
+        // Phase 1: Generate plan (in background)
+        Thread {
+            val success = agentController?.generatePlan(userRequest) ?: false
+            
+            if (!success) {
+                log("计划生成失败")
+                return@Thread
+            }
+            
+            // Phase 2: Start execution loop
+            handler.post {
+                isRunning = true
+                startExecutionLoop()
+            }
+        }.start()
+    }
+    
+    private fun startExecutionLoop() {
         loopRunnable = object : Runnable {
             override fun run() {
                 if (!isRunning) return
                 
                 Thread {
                     try {
-                        val shouldContinue = agentController?.runOnce() ?: false
+                        val shouldContinue = agentController?.executeStep() ?: false
                         if (!shouldContinue) {
                             isRunning = false
-                            log("Agent 已停止")
+                            log("任务完成")
                             return@Thread
                         }
                     } catch (e: Exception) {
@@ -83,9 +103,7 @@ class AutoService : AccessibilityService() {
         onLogCallback?.invoke(msg)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Not used in polling mode
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     override fun onInterrupt() {
         Log.d("AutoService", "Service Interrupted")
@@ -138,6 +156,16 @@ class AutoService : AccessibilityService() {
         path.moveTo(x, y)
         val builder = GestureDescription.Builder()
         builder.addStroke(GestureDescription.StrokeDescription(path, 0, 100))
+        dispatchGesture(builder.build(), null, null)
+    }
+    
+    fun performSwipe(startX: Float, startY: Float, endX: Float, endY: Float) {
+        Log.d("AutoService", "Swiping from ($startX, $startY) to ($endX, $endY)")
+        val path = Path()
+        path.moveTo(startX, startY)
+        path.lineTo(endX, endY)
+        val builder = GestureDescription.Builder()
+        builder.addStroke(GestureDescription.StrokeDescription(path, 0, 500))
         dispatchGesture(builder.build(), null, null)
     }
 }

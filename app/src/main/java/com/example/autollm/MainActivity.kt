@@ -18,11 +18,12 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
 
     private lateinit var tvStatus: TextView
+    private lateinit var tvPlan: TextView
     private lateinit var tvLog: TextView
     private lateinit var scrollLog: ScrollView
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
-    private lateinit var etGoal: EditText
+    private lateinit var etRequest: EditText
     
     private val handler = Handler(Looper.getMainLooper())
     private val logBuilder = StringBuilder()
@@ -33,11 +34,12 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         tvStatus = findViewById(R.id.tvStatus)
+        tvPlan = findViewById(R.id.tvPlan)
         tvLog = findViewById(R.id.tvLog)
         scrollLog = findViewById(R.id.scrollLog)
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
-        etGoal = findViewById(R.id.etGoal)
+        etRequest = findViewById(R.id.etRequest)
         
         val btnOpenSettings = findViewById<Button>(R.id.btnOpenSettings)
         val btnClearLog = findViewById<Button>(R.id.btnClearLog)
@@ -53,8 +55,16 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             
-            val goal = etGoal.text.toString().ifEmpty { "探索界面" }
-            service.startAgent(goal)
+            val request = etRequest.text.toString().ifEmpty { 
+                Toast.makeText(this, "请输入任务需求", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            
+            tvPlan.text = "正在生成计划..."
+            logBuilder.clear()
+            tvLog.text = ""
+            
+            service.startAgent(request)
             updateUI(true)
         }
 
@@ -68,11 +78,13 @@ class MainActivity : AppCompatActivity() {
             tvLog.text = ""
         }
 
-        // Setup log callback
+        // Setup callbacks
         AutoService.onLogCallback = { msg ->
-            handler.post {
-                appendLog(msg)
-            }
+            handler.post { appendLog(msg) }
+        }
+        
+        AutoService.onPlanCallback = { plan ->
+            handler.post { updatePlanDisplay(plan) }
         }
         
         // Periodic status update
@@ -84,16 +96,36 @@ class MainActivity : AppCompatActivity() {
         }, 1000)
     }
 
+    private fun updatePlanDisplay(plan: TaskPlanner.TaskPlan?) {
+        if (plan == null) {
+            tvPlan.text = "等待生成计划..."
+            return
+        }
+        
+        val sb = StringBuilder()
+        sb.append("任务: ${plan.task}\n\n")
+        
+        plan.steps.forEachIndexed { index, step ->
+            val marker = when {
+                index < plan.currentStepIndex -> "✓"
+                index == plan.currentStepIndex -> "→"
+                else -> "○"
+            }
+            sb.append("$marker ${index + 1}. $step\n")
+        }
+        
+        tvPlan.text = sb.toString()
+    }
+
     private fun updateStatus() {
         val service = AutoService.instance
         val statusText = when {
             service == null -> "状态: 无障碍服务未开启"
-            AutoService.isRunning -> "状态: Agent 运行中..."
+            AutoService.isRunning -> "状态: 执行中..."
             else -> "状态: 已就绪"
         }
         tvStatus.text = statusText
         
-        // Update button states
         btnStart.isEnabled = service != null && !AutoService.isRunning
         btnStop.isEnabled = AutoService.isRunning
     }
@@ -115,5 +147,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         AutoService.onLogCallback = null
+        AutoService.onPlanCallback = null
     }
 }

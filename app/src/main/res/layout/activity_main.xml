@@ -16,7 +16,7 @@
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:text="状态: 未启动"
         android:textColor="#666666" />
 
@@ -24,17 +24,17 @@
         android:id="@+id/btnOpenSettings"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:text="开启无障碍服务" />
 
     <EditText
-        android:id="@+id/etGoal"
+        android:id="@+id/etRequest"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:hint="输入任务目标（可选）"
+        android:hint="输入你想让手机做什么..."
         android:inputType="text"
-        android:text="探索界面，找到可以点击的元素" />
+        android:text="帮我打开设置，查看存储空间" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -47,7 +47,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="启动 Agent" />
+            android:text="开始执行" />
 
         <Button
             android:id="@+id/btnStop"
@@ -59,19 +59,39 @@
             android:text="停止" />
     </LinearLayout>
 
+    <!-- Plan Display -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="调试日志:"
+        android:layout_marginTop="12dp"
+        android:text="执行计划:"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvPlan"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="#E8F5E9"
+        android:fontFamily="monospace"
+        android:padding="8dp"
+        android:text="等待生成计划..."
+        android:textSize="12sp" />
+
+    <!-- Log Display -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="执行日志:"
         android:textStyle="bold" />
 
     <ScrollView
         android:id="@+id/scrollLog"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        android:layout_marginTop="4dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
         android:background="#F5F5F5"
         android:padding="8dp">
 
@@ -80,7 +100,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
     </ScrollView>
 
     <Button
