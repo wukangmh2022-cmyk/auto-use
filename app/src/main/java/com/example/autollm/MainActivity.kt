@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
@@ -19,14 +20,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvPlan: TextView
     private lateinit var tvLog: TextView
-    private lateinit var tvTokenStats: TextView // NEW
-    private lateinit var cbVisionMode: CheckBox // NEW
+    private lateinit var tvTokenStats: TextView 
+    private lateinit var cbVisionMode: CheckBox 
     private lateinit var scrollLog: ScrollView
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
     private lateinit var btnSave: Button
     private lateinit var btnConfirm: Button
-    private lateinit var btnModify: Button // NEW
+    
+    // Modification UI
+    private lateinit var llModifyContainer: LinearLayout
+    private lateinit var btnModify: TextView 
+    private lateinit var llModifyInput: LinearLayout
+    private lateinit var etModifyInput: EditText
+    private lateinit var btnSendModify: Button
+    
     private lateinit var etRequest: EditText
     private lateinit var llSavedTasks: LinearLayout
     
@@ -50,14 +58,21 @@ class MainActivity : AppCompatActivity() {
         tvStatus = findViewById(R.id.tvStatus)
         tvPlan = findViewById(R.id.tvPlan)
         tvLog = findViewById(R.id.tvLog)
-        tvTokenStats = findViewById(R.id.tvTokenStats) // NEW
-        cbVisionMode = findViewById(R.id.cbVisionMode) // NEW
+        tvTokenStats = findViewById(R.id.tvTokenStats)
+        cbVisionMode = findViewById(R.id.cbVisionMode)
         scrollLog = findViewById(R.id.scrollLog)
         btnStart = findViewById(R.id.btnStart)
         btnStop = findViewById(R.id.btnStop)
         btnSave = findViewById(R.id.btnSave)
         btnConfirm = findViewById(R.id.btnConfirm)
-        btnModify = findViewById(R.id.btnModify) // NEW
+        
+        // Modify Section
+        llModifyContainer = findViewById(R.id.llModifyContainer)
+        btnModify = findViewById(R.id.btnModify)
+        llModifyInput = findViewById(R.id.llModifyInput)
+        etModifyInput = findViewById(R.id.etModifyInput)
+        btnSendModify = findViewById(R.id.btnSendModify)
+        
         etRequest = findViewById(R.id.etRequest)
         llSavedTasks = findViewById(R.id.llSavedTasks)
         
@@ -100,7 +115,7 @@ class MainActivity : AppCompatActivity() {
             btnStart.isEnabled = false
             btnConfirm.isEnabled = false
             btnSave.isEnabled = false
-            btnModify.isEnabled = false
+            llModifyContainer.visibility = View.GONE
             
             // 只生成计划，不执行
             Thread {
@@ -112,7 +127,6 @@ class MainActivity : AppCompatActivity() {
                     val cleanText = partialText.replace("\\n", "\n") // Simple cleanup
                     handler.post { 
                         tvPlan.text = cleanText
-                        // Scroll to bottom if needed (optional, simplistic here)
                     }
                 }
                 
@@ -123,7 +137,12 @@ class MainActivity : AppCompatActivity() {
                         updatePlanDisplay(plan)
                         btnConfirm.isEnabled = true
                         btnSave.isEnabled = true
-                        btnModify.isEnabled = true // Enable modify button
+                        
+                        // Show modify option
+                        llModifyContainer.visibility = View.VISIBLE
+                        btnModify.visibility = View.VISIBLE
+                        llModifyInput.visibility = View.GONE
+                        
                         appendLog("计划已生成，请确认或修改")
                     } else {
                         tvPlan.text = "计划生成失败，请重试"
@@ -152,24 +171,19 @@ class MainActivity : AppCompatActivity() {
             updateUI(true)
         }
 
-        // 修改计划
+        // 修改计划 - 点击展开输入框
         btnModify.setOnClickListener {
-            val plan = pendingPlan
-            if (plan == null) return@setOnClickListener
-            
-            val input = EditText(this)
-            AlertDialog.Builder(this)
-                .setTitle("修改计划")
-                .setMessage("请输入修改意见（如：第2步不对...）")
-                .setView(input)
-                .setPositiveButton("提交") { _, _ ->
-                    val feedback = input.text.toString()
-                    if (feedback.isNotEmpty()) {
-                        performRefinePlan(plan, feedback)
-                    }
-                }
-                .setNegativeButton("取消", null)
-                .show()
+            btnModify.visibility = View.GONE
+            llModifyInput.visibility = View.VISIBLE
+        }
+
+        // 发送修改建议
+        btnSendModify.setOnClickListener {
+            val plan = pendingPlan ?: return@setOnClickListener
+            val feedback = etModifyInput.text.toString()
+            if (feedback.isNotEmpty()) {
+                performRefinePlan(plan, feedback)
+            }
         }
 
         btnStop.setOnClickListener {
@@ -177,7 +191,7 @@ class MainActivity : AppCompatActivity() {
             updateUI(false)
         }
         
-        // 直接保存（不弹定时选项）
+        // 直接保存
         btnSave.setOnClickListener {
             val plan = pendingPlan ?: AutoService.instance?.getCurrentPlan()
             if (plan == null) {
@@ -226,9 +240,9 @@ class MainActivity : AppCompatActivity() {
         refreshSavedTasks()
     }
     
-    /**
-     * 显示任务详情对话框
-     */
+    // ... helper methods for dialogs (showTaskDetailDialog, showScheduleDialog, etc.) ...
+    // Since I'm rewriting the whole file, I need to include them.
+    
     private fun showTaskDetailDialog(task: TaskPlanner.TaskPlan) {
         val stepsText = task.steps.mapIndexed { i, step -> 
             "${i + 1}. ${step.description}" 
@@ -308,7 +322,6 @@ $scheduleText
                 gravity = Gravity.CENTER
                 setPadding(16, 8, 16, 8)
                 
-                // 点击显示详情，不直接执行
                 setOnClickListener {
                     showTaskDetailDialog(task)
                 }
@@ -359,7 +372,7 @@ $scheduleText
         btnStart.isEnabled = false
         btnConfirm.isEnabled = false
         btnSave.isEnabled = false
-        btnModify.isEnabled = false
+        llModifyContainer.visibility = View.GONE // Hide during modification
         
         Thread {
             val planner = TaskPlanner(LLMClient())
@@ -375,14 +388,20 @@ $scheduleText
                     updatePlanDisplay(newPlan)
                     btnConfirm.isEnabled = true
                     btnSave.isEnabled = true
-                    btnModify.isEnabled = true
+                    
+                    // Reset Modify UI
+                    etModifyInput.setText("")
+                    llModifyContainer.visibility = View.VISIBLE
+                    llModifyInput.visibility = View.GONE
+                    btnModify.visibility = View.VISIBLE
+                    
                     appendLog("计划已修正，请确认")
                 } else {
                     tvPlan.text = "修正失败，请重试。\n原计划保持不变。"
-                    updatePlanDisplay(currentPlan) // Restore old plan display
+                    updatePlanDisplay(currentPlan)
                     btnConfirm.isEnabled = true
                     btnSave.isEnabled = true
-                    btnModify.isEnabled = true
+                    llModifyContainer.visibility = View.VISIBLE // Show again
                 }
             }
         }.start()
@@ -392,7 +411,17 @@ $scheduleText
         btnStart.isEnabled = !running
         btnStop.isEnabled = running
         btnConfirm.isEnabled = !running && pendingPlan != null
-        btnModify.isEnabled = !running && pendingPlan != null
+        btnSave.isEnabled = !running && pendingPlan != null
+        
+        if (!running && pendingPlan != null) {
+            llModifyContainer.visibility = View.VISIBLE
+            // Reset to show button if needed
+            if (llModifyInput.visibility != View.VISIBLE) {
+                btnModify.visibility = View.VISIBLE
+            }
+        } else {
+            llModifyContainer.visibility = View.GONE
+        }
     }
 
     private fun appendLog(msg: String) {
