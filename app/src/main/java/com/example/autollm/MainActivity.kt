@@ -174,8 +174,7 @@ class MainActivity : AppCompatActivity() {
             }
             
             service.startWithPlan(plan)
-            pendingPlan = null
-            btnConfirm.isEnabled = false
+            // pendingPlan = null // 不要清除，以便停止后能继续修改或保存
             updateUI(true)
         }
 
