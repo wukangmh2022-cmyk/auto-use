@@ -225,69 +225,120 @@ class AutoService : AccessibilityService() {
     }
 
     /**
-     * 输入文字到当前焦点的输入框
+     * 输入文字到输入框
      * @param text 要输入的文字
-     * @param x 可选，如果当前没有焦点输入框，先点击此坐标
-     * @param y 可选
+     * @param x 输入框坐标
+     * @param y 输入框坐标
      */
     fun performInput(text: String, x: Float? = null, y: Float? = null): Boolean {
-        Log.d("AutoService", "Input text: $text at ($x, $y)")
+        Log.d("AutoService", "Input text: '$text' at ($x, $y)")
         
-        // 如果提供了坐标，先点击
+        // 1. 如果提供了坐标，先点击激活输入框
         if (x != null && y != null) {
             performClick(x, y)
-            Thread.sleep(300) // 等待输入框获取焦点
+            Thread.sleep(500) // 等待输入框获取焦点和键盘弹出
         }
         
-        // 查找当前焦点的输入框
-        val root = rootInActiveWindow ?: return false
-        val focusedNode = findFocusedInput(root)
+        // 2. 查找可编辑节点
+        val root = rootInActiveWindow
+        if (root == null) {
+            log("无法获取窗口根节点")
+            return false
+        }
         
-        if (focusedNode != null) {
-            val args = android.os.Bundle()
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            val result = focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            focusedNode.recycle()
-            return result
+        // 策略1: 通过坐标查找可编辑节点
+        var targetNode: AccessibilityNodeInfo? = null
+        if (x != null && y != null) {
+            targetNode = findEditableNodeAt(root, x.toInt(), y.toInt())
+        }
+        
+        // 策略2: 查找当前焦点的可编辑节点
+        if (targetNode == null) {
+            targetNode = findFocusedEditableNode(root)
+        }
+        
+        // 策略3: 找任意可编辑节点
+        if (targetNode == null) {
+            targetNode = findAnyEditableNode(root)
+        }
+        
+        if (targetNode == null) {
+            log("未找到任何可编辑节点")
+            return false
+        }
+        
+        log("找到输入框: ${targetNode.className}")
+        
+        // 尝试设置文本
+        val args = android.os.Bundle()
+        args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        val result = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        
+        if (result) {
+            log("输入成功: $text")
+            targetNode.recycle()
+            return true
+        }
+        
+        // ACTION_SET_TEXT 失败，尝试粘贴
+        log("ACTION_SET_TEXT 失败，尝试粘贴")
+        val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("input", text)
+        clipboard.setPrimaryClip(clip)
+        
+        val pasteResult = targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        targetNode.recycle()
+        
+        if (pasteResult) {
+            log("粘贴成功: $text")
         } else {
-            // 没找到焦点输入框，尝试用剪贴板方式
-            log("未找到焦点输入框，尝试剪贴板方式")
-            return pasteText(text)
+            log("粘贴也失败了")
         }
+        
+        return pasteResult
     }
     
-    private fun findFocusedInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isFocused && node.isEditable) {
+    private fun findEditableNodeAt(node: AccessibilityNodeInfo, x: Int, y: Int): AccessibilityNodeInfo? {
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        
+        if (rect.contains(x, y) && node.isEditable) {
             return node
         }
+        
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            val result = findFocusedInput(child)
+            val result = findEditableNodeAt(child, x, y)
             if (result != null) return result
             child.recycle()
         }
         return null
     }
     
-    private fun pasteText(text: String): Boolean {
-        try {
-            val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            val clip = android.content.ClipData.newPlainText("input", text)
-            clipboard.setPrimaryClip(clip)
-            
-            // 找到当前焦点节点并执行粘贴
-            val root = rootInActiveWindow ?: return false
-            val focusedNode = findFocusedInput(root)
-            if (focusedNode != null) {
-                val result = focusedNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                focusedNode.recycle()
-                return result
-            }
-            return false
-        } catch (e: Exception) {
-            Log.e("AutoService", "Paste failed", e)
-            return false
+    private fun findFocusedEditableNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isFocused && node.isEditable) {
+            return node
         }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findFocusedEditableNode(child)
+            if (result != null) return result
+            child.recycle()
+        }
+        return null
+    }
+    
+    private fun findAnyEditableNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isEditable) {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findAnyEditableNode(child)
+            if (result != null) return result
+            child.recycle()
+        }
+        return null
     }
 
     // --- Screenshot Utils ---
