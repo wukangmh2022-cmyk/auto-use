@@ -43,14 +43,25 @@ class LLMClient {
         }
     }
 
-    fun chat(messages: List<Map<String, String>>): String {
+    fun chat(messages: List<Map<String, Any>>): String {
         val apiKey = fetchApiKey()
         
         val messagesArray = JSONArray()
         for (msg in messages) {
             val msgObj = JSONObject()
             msgObj.put("role", msg["role"])
-            msgObj.put("content", msg["content"])
+            val content = msg["content"]
+            if (content is List<*>) {
+                val contentArray = JSONArray()
+                for (item in content) {
+                    if (item is Map<*, *>) {
+                        contentArray.put(JSONObject(item as Map<*, *>))
+                    }
+                }
+                msgObj.put("content", contentArray)
+            } else {
+                msgObj.put("content", content.toString())
+            }
             messagesArray.put(msgObj)
         }
         
@@ -58,29 +69,26 @@ class LLMClient {
             put("model", MODEL)
             put("messages", messagesArray)
         }
-
-        val request = Request.Builder()
-            .url(LLM_BASE_URL)
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .post(requestBody.toString().toRequestBody(JSON_MEDIA))
-            .build()
-
+        
+        // ...
+        
         client.newCall(request).execute().use { response ->
-            val body = response.body?.string() ?: ""
-            if (!response.isSuccessful) {
-                throw IOException("LLM request failed: ${response.code} - $body")
+            // ...
+            val json = JSONObject(body)
+            
+            // Track usage
+            val usage = json.optJSONObject("usage")
+            if (usage != null) {
+                val total = usage.optInt("total_tokens", 0)
+                onTokenUsage?.invoke(total)
             }
             
-            // Parse response
-            val json = JSONObject(body)
             val choices = json.getJSONArray("choices")
-            if (choices.length() == 0) throw IOException("No choices in response")
-            
-            val message = choices.getJSONObject(0).getJSONObject("message")
-            return message.getString("content")
+            // ...
         }
     }
+    
+    var onTokenUsage: ((Int) -> Unit)? = null
     
     /**
      * 流式调用

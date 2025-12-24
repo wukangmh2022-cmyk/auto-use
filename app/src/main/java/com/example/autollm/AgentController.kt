@@ -11,6 +11,68 @@ class AgentController(
     private val llmClient = LLMClient()
     private val taskPlanner = TaskPlanner(llmClient)
     private val history = mutableListOf<String>()
+    
+    // ...
+    private var visionEnabled = false
+    private var totalTokens = 0
+    var onTokenUsage: ((Int) -> Unit)? = null
+    
+    init {
+        llmClient.onTokenUsage = { usage ->
+            totalTokens += usage
+            onTokenUsage?.invoke(totalTokens)
+        }
+    }
+    
+    fun setVisionMode(enabled: Boolean) {
+        visionEnabled = enabled
+    }
+
+    // ...
+
+    fun executeStep(): Boolean {
+        // ... (existing checks)
+
+        try {
+            val uiJson = autoService.dumpUI()
+            // ... (uiHash checks)
+            
+            // 视情况截图
+            var screenshot: String? = null
+            if (visionEnabled) {
+                screenshot = autoService.captureScreenshotBase64()
+            }
+
+            // ... (log)
+
+            // 构建消息
+            val promptText = buildPrompt(uiJson, plan)
+            
+            val userContent: Any = if (screenshot != null) {
+                listOf(
+                    mapOf("type" to "text", "text" to promptText),
+                    mapOf("type" to "image_url", "image_url" to mapOf("url" to "data:image/jpeg;base64,$screenshot"))
+                )
+            } else {
+                promptText
+            }
+
+            val response = llmClient.chat(listOf(
+                mapOf("role" to "system", "content" to getSystemPrompt(reasoningLevel, screenshot != null)),
+                mapOf("role" to "user", "content" to userContent)
+            ))
+
+            // ... (rest)
+    }
+
+    // Update getSystemPrompt to mention vision if enabled
+    private fun getSystemPrompt(level: Int, hasVision: Boolean = false): String {
+        // ...
+        val visionGuide = if (hasVision) "5.参考截图补充界面细节。" else ""
+        return """Android助手。协议:
+...
+规则: 1.只回JSON 2.$thinkingGuide 3.优先点带t/d元素 4.步完设step_completed:true $visionGuide"""
+    }
     private val maxHistorySize = 5
     
     // 状态监测变量

@@ -16,17 +16,41 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="AutoLLM Agent"
-            android:textSize="20sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/tvStatus"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="未启动"
-            android:textColor="#666666"
-            android:textSize="12sp" />
+            android:orientation="vertical"
+            android:gravity="end">
+
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="未启动"
+                android:textColor="#666666"
+                android:textSize="11sp" />
+                
+            <TextView
+                android:id="@+id/tvTokenStats"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Token: 0"
+                android:textColor="#009688"
+                android:textStyle="bold"
+                android:textSize="10sp" />
+        </LinearLayout>
     </LinearLayout>
+
+    <CheckBox
+        android:id="@+id/cbVisionMode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="👁️ 启用视觉辅助 (Beta)"
+        android:textSize="12sp"
+        android:layout_marginTop="2dp"/>
 
     <Button
         android:id="@+id/btnOpenSettings"
