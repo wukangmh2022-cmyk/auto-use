@@ -70,6 +70,13 @@ class AgentController(
 
             // 5. Parse and Execute
             val action = parseAction(response) ?: return true
+            
+            // 记录思维内容
+            val thought = action.optString("th", "")
+            if (thought.isNotEmpty()) {
+                log("🤔 $thought")
+            }
+
             val actionType = action.optString("action", "")
             val stepCompleted = action.optBoolean("step_completed", false)
             
@@ -128,14 +135,11 @@ class AgentController(
 
     private fun getSystemPrompt(): String {
         return """Android助手。协议:
-- t:文本, d:描述, i:ID, c:类名, b:中心点坐标(x,y), k:1(可点)
+- t:文本, d:描述, i:ID, c:类名, b:中心点(x,y), k:1(可点)
 操作(JSON):
-- {"action":"click","b":"x,y","step_completed":布尔}
-- {"action":"back","step_completed":布尔}
-- {"action":"wait","s":秒,"step_completed":布尔}
-- {"action":"scroll_down/up","step_completed":布尔}
-- {"action":"done","r":"原因"}
-规则: 1.只回JSON 2.优先点带t/d的元素 3.步完设step_completed:true"""
+- {"th":"思维","action":"click","b":"x,y","step_completed":布尔}
+- {"th":"思维","action":"back/wait/home/done/scroll_down/up"...}
+规则: 1.只回JSON 2.th简述推理(建议10字内) 3.优先点带t/d的元素 4.步完设step_completed:true"""
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {
