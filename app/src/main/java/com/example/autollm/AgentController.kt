@@ -55,8 +55,7 @@ class AgentController(
         try {
             // 1. Dump UI
             val uiJson = autoService.dumpUI()
-            val nodeCount = countNodes(uiJson)
-            log("[${plan.progress()}] 获取界面: $nodeCount 个节点")
+            log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
 
             // 2. 页面校验
             val currentStep = plan.currentStep()
@@ -238,6 +237,26 @@ $uiJson
 
     private fun countNodes(json: String): Int {
         return try { JSONArray(json).length() } catch (e: Exception) { 0 }
+    }
+
+    private fun compressUiLog(json: String): String {
+        try {
+            val ja = JSONArray(json)
+            val sb = StringBuilder()
+            sb.append("(${ja.length()}个) ")
+            for (i in 0 until ja.length()) {
+                val obj = ja.getJSONObject(i)
+                val txt = obj.optString("txt")
+                val desc = obj.optString("desc")
+                val label = if (txt.isNotEmpty()) txt else desc
+                if (label.isNotEmpty()) {
+                    sb.append("[$label] ")
+                }
+            }
+            return if (sb.length > 200) sb.substring(0, 200) + "..." else sb.toString()
+        } catch (e: Exception) {
+            return "解析错误"
+        }
     }
 
     private fun log(msg: String) {

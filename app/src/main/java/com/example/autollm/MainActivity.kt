@@ -148,6 +148,17 @@ class MainActivity : AppCompatActivity() {
             refreshSavedTasks()
         }
 
+        // Logs
+        val btnCopyLog = findViewById<Button>(R.id.btnCopyLog)
+        val btnClearLog = findViewById<Button>(R.id.btnClearLog)
+        
+        btnCopyLog.setOnClickListener {
+            val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("AutoLLM Log", logBuilder.toString())
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(this, "日志已复制", Toast.LENGTH_SHORT).show()
+        }
+
         btnClearLog.setOnClickListener {
             logBuilder.clear()
             tvLog.text = ""

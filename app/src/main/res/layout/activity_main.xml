@@ -32,7 +32,7 @@
         android:id="@+id/btnOpenSettings"
         android:layout_width="match_parent"
         android:layout_height="40dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:textSize="12sp"
         android:text="开启无障碍服务" />
 
@@ -41,7 +41,7 @@
         android:id="@+id/etRequest"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:hint="输入你想让手机做什么..."
         android:inputType="text"
         android:textSize="14sp" />
@@ -95,7 +95,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="10dp"
         android:text="已保存任务:"
         android:textStyle="bold"
         android:textSize="13sp" />
@@ -103,7 +103,7 @@
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp">
+        android:layout_marginTop="2dp">
         
         <LinearLayout
             android:id="@+id/llSavedTasks"
@@ -116,7 +116,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:text="执行计划:"
         android:textStyle="bold"
         android:textSize="13sp" />
@@ -125,10 +125,10 @@
         android:id="@+id/tvPlan"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:background="#E8F5E9"
         android:fontFamily="monospace"
-        android:padding="8dp"
+        android:padding="6dp"
         android:text="等待生成计划..."
         android:textSize="11sp" />
 
@@ -136,7 +136,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:text="执行日志:"
         android:textStyle="bold"
         android:textSize="13sp" />
@@ -145,7 +145,7 @@
         android:id="@+id/scrollLog"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:layout_weight="1"
         android:background="#F5F5F5"
         android:padding="6dp">
@@ -158,12 +158,28 @@
             android:textSize="10sp" />
     </ScrollView>
 
-    <Button
-        android:id="@+id/btnClearLog"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:layout_marginTop="4dp"
-        android:textSize="12sp"
-        android:text="清除日志" />
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="2dp">
+        
+        <Button
+            android:id="@+id/btnCopyLog"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:text="复制日志" />
+            
+        <Button
+            android:id="@+id/btnClearLog"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:text="清除日志" />
+    </LinearLayout>
 
 </LinearLayout>
