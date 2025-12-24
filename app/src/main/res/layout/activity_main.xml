@@ -3,30 +3,40 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="12dp">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="AutoLLM Agent"
-        android:textSize="24sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="AutoLLM Agent"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="状态: 未启动"
-        android:textColor="#666666" />
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="未启动"
+            android:textColor="#666666"
+            android:textSize="12sp" />
+    </LinearLayout>
 
     <Button
         android:id="@+id/btnOpenSettings"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_height="40dp"
+        android:layout_marginTop="8dp"
+        android:textSize="12sp"
         android:text="开启无障碍服务" />
 
+    <!-- 输入区 -->
     <EditText
         android:id="@+id/etRequest"
         android:layout_width="match_parent"
@@ -34,38 +44,72 @@
         android:layout_marginTop="8dp"
         android:hint="输入你想让手机做什么..."
         android:inputType="text"
-        android:text="帮我打开设置，查看存储空间" />
+        android:textSize="14sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:orientation="horizontal">
 
         <Button
             android:id="@+id/btnStart"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
             android:layout_weight="1"
+            android:textSize="12sp"
             android:text="开始执行" />
 
         <Button
             android:id="@+id/btnStop"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
             android:layout_weight="1"
             android:enabled="false"
+            android:textSize="12sp"
             android:text="停止" />
+            
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:enabled="false"
+            android:textSize="12sp"
+            android:text="保存" />
     </LinearLayout>
 
-    <!-- Plan Display -->
+    <!-- 已保存任务 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
+        android:text="已保存任务:"
+        android:textStyle="bold"
+        android:textSize="13sp" />
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp">
+        
+        <LinearLayout
+            android:id="@+id/llSavedTasks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <!-- 计划显示 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:text="执行计划:"
-        android:textStyle="bold" />
+        android:textStyle="bold"
+        android:textSize="13sp" />
 
     <TextView
         android:id="@+id/tvPlan"
@@ -76,15 +120,16 @@
         android:fontFamily="monospace"
         android:padding="8dp"
         android:text="等待生成计划..."
-        android:textSize="12sp" />
+        android:textSize="11sp" />
 
-    <!-- Log Display -->
+    <!-- 日志显示 -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:text="执行日志:"
-        android:textStyle="bold" />
+        android:textStyle="bold"
+        android:textSize="13sp" />
 
     <ScrollView
         android:id="@+id/scrollLog"
@@ -93,21 +138,22 @@
         android:layout_marginTop="4dp"
         android:layout_weight="1"
         android:background="#F5F5F5"
-        android:padding="8dp">
+        android:padding="6dp">
 
         <TextView
             android:id="@+id/tvLog"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
-            android:textSize="11sp" />
+            android:textSize="10sp" />
     </ScrollView>
 
     <Button
         android:id="@+id/btnClearLog"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_height="36dp"
+        android:layout_marginTop="4dp"
+        android:textSize="12sp"
         android:text="清除日志" />
 
 </LinearLayout>

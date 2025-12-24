@@ -21,6 +21,9 @@ class AutoService : AccessibilityService() {
         var isRunning = false
         var onLogCallback: ((String) -> Unit)? = null
         var onPlanCallback: ((TaskPlanner.TaskPlan?) -> Unit)? = null
+        
+        // 定时任务触发时使用
+        var pendingPlanToExecute: TaskPlanner.TaskPlan? = null
     }
 
     private var agentController: AgentController? = null
@@ -39,14 +42,22 @@ class AutoService : AccessibilityService() {
         agentController?.onPlanUpdated = { plan ->
             handler.post { onPlanCallback?.invoke(plan) }
         }
+        
+        // 检查是否有待执行的定时任务
+        pendingPlanToExecute?.let { plan ->
+            pendingPlanToExecute = null
+            startWithPlan(plan)
+        }
     }
 
+    /**
+     * 用新生成的需求启动
+     */
     fun startAgent(userRequest: String) {
         if (isRunning) return
         
         log("开始处理: $userRequest")
         
-        // Phase 1: Generate plan (in background)
         Thread {
             val success = agentController?.generatePlan(userRequest) ?: false
             
@@ -55,12 +66,24 @@ class AutoService : AccessibilityService() {
                 return@Thread
             }
             
-            // Phase 2: Start execution loop
             handler.post {
                 isRunning = true
                 startExecutionLoop()
             }
         }.start()
+    }
+    
+    /**
+     * 用已有计划启动
+     */
+    fun startWithPlan(plan: TaskPlanner.TaskPlan) {
+        if (isRunning) return
+        
+        log("加载任务: ${plan.name}")
+        agentController?.executePlan(plan)
+        
+        isRunning = true
+        startExecutionLoop()
     }
     
     private fun startExecutionLoop() {
@@ -81,7 +104,6 @@ class AutoService : AccessibilityService() {
                         Log.e("AutoService", "Loop error", e)
                     }
                     
-                    // Schedule next run after 3 seconds
                     if (isRunning) {
                         handler.postDelayed(loopRunnable!!, 3000)
                     }
@@ -97,6 +119,8 @@ class AutoService : AccessibilityService() {
         loopRunnable?.let { handler.removeCallbacks(it) }
         log("Agent 已停止")
     }
+    
+    fun getCurrentPlan(): TaskPlanner.TaskPlan? = agentController?.currentPlan
 
     private fun log(msg: String) {
         Log.d("AutoService", msg)
@@ -104,7 +128,6 @@ class AutoService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-
     override fun onInterrupt() {
         Log.d("AutoService", "Service Interrupted")
         isRunning = false
