@@ -173,6 +173,8 @@ class AgentController(
                 }
                 "scroll_down" -> autoService.performSwipe(540f, 500f, 540f, 1500f).also { addHistory("下滑") }
                 "scroll_up" -> autoService.performSwipe(540f, 1500f, 540f, 500f).also { addHistory("上滑") }
+                "scroll_left" -> autoService.performSwipe(900f, 1000f, 180f, 1000f).also { addHistory("左滑") }
+                "scroll_right" -> autoService.performSwipe(180f, 1000f, 900f, 1000f).also { addHistory("右滑") }
                 "done" -> {
                     log("任务完成: ${action.optString("r", "完成")}")
                     currentPlan = null
@@ -211,22 +213,22 @@ class AgentController(
 
     private fun getSystemPrompt(level: Int, hasVision: Boolean = false): String {
         val thinkingGuide = when(level) {
-            2 -> "⚠️卡顿中！必须反思为何失败，尝试不同路径（如先home/back）。"
-            1 -> "分析当前界面布局，定位目标。"
-            else -> "简述意图。"
+            2 -> "⚠️多次失败！必须换策略：尝试搜索、左右滑动翻页、或返回重来。"
+            1 -> "仔细分析界面，定位目标元素坐标。"
+            else -> "简述操作意图。"
         }
-        val visionGuide = if (hasVision) "4.视觉模式：参考截图补充XML缺失的细节（如无障碍标签丢失的图标）。" else ""
+        val visionGuide = if (hasVision) "\n5.视觉模式：参考截图识别无障碍标签缺失的图标。" else ""
         
         return """Android操作助手。
-协议: t:文本, d:无障碍描述, i:ID, c:类名, b:坐标, k:可点
-操作: {"th":"思考","action":"click","b":"x,y","step_completed":false}
-(action支持: click, back, home, wait, scroll_down, scroll_up, done)
+协议: t:文本, d:描述, i:ID, c:类名, b:坐标(x,y), k:可点击
+操作: {"th":"思考","action":"动作","b":"x,y","step_completed":false}
+动作列表: click, back, home, wait, scroll_down, scroll_up, scroll_left, scroll_right, done
 策略:
-1. 打开应用 -> 必先 action:"home"。
-2. 找不到目标 -> 尝试 scroll_down 或 back。
-3. 优先利用 t(text) 和 d(desc) 定位。
-$visionGuide
-要求: 1.只回JSON 2.th字段:$thinkingGuide 3.步完设step_completed:true"""
+1. 打开应用 -> 先home回桌面。
+2. 桌面找不到App -> scroll_left/right翻页，或下拉搜索。
+3. 列表找不到 -> scroll_down/up滚动。
+4. 多次失败 -> 尝试搜索功能或换路径。$visionGuide
+要求: 1.只回JSON 2.th:$thinkingGuide 3.步完设step_completed:true"""
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {
