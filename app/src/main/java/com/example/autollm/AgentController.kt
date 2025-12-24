@@ -164,6 +164,18 @@ class AgentController(
                         addHistory("点击 $coords")
                     }
                 }
+                "input" -> {
+                    val text = action.optString("text", "")
+                    val coords = action.optString("b", "").split(",")
+                    if (text.isNotEmpty()) {
+                        if (coords.size == 2) {
+                            autoService.performInput(text, coords[0].toFloat(), coords[1].toFloat())
+                        } else {
+                            autoService.performInput(text)
+                        }
+                        addHistory("输入 '$text'")
+                    }
+                }
                 "back" -> autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK).also { addHistory("返回") }
                 "home" -> autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME).also { addHistory("主页") }
                 "wait" -> {
@@ -212,23 +224,28 @@ class AgentController(
     }
 
     private fun getSystemPrompt(level: Int, hasVision: Boolean = false): String {
-        val thinkingGuide = when(level) {
-            2 -> "⚠️多次失败！必须换策略：尝试搜索、左右滑动翻页、或返回重来。"
-            1 -> "仔细分析界面，定位目标元素坐标。"
-            else -> "简述操作意图。"
-        }
-        val visionGuide = if (hasVision) "\n5.视觉模式：参考截图识别无障碍标签缺失的图标。" else ""
-        
-        return """Android操作助手。
-协议: t:文本, d:描述, i:ID, c:类名, b:坐标(x,y), k:可点击
-操作: {"th":"思考","action":"动作","b":"x,y","step_completed":false}
-动作列表: click, back, home, wait, scroll_down, scroll_up, scroll_left, scroll_right, done
+        // Level 0: 最简 Prompt，省 Token
+        val basePrompt = """Android助手。协议:t文本,d描述,b坐标,k可点
+动作:click,input,back,home,wait,scroll_down/up/left/right,done
+格式:{"th":"思考","action":"动作","b":"x,y","text":"输入内容","step_completed":false}
+要求:只回JSON,步完设step_completed:true"""
+
+        // Level 1/2: 追加策略
+        val strategyPrompt = if (level >= 1) """
 策略:
-1. 打开应用 -> 先home回桌面。
-2. 桌面找不到App -> scroll_left/right翻页，或下拉搜索。
-3. 列表找不到 -> scroll_down/up滚动。
-4. 多次失败 -> 尝试搜索功能或换路径。$visionGuide
-要求: 1.只回JSON 2.th:$thinkingGuide 3.步完设step_completed:true"""
+- 打开应用->先home
+- 桌面找不到->scroll_left/right翻页
+- 列表找不到->scroll_down/up
+- 输入框->先click再input
+- 多次失败->换路径或搜索""" else ""
+
+        // Level 2: 强制换策略提示
+        val urgentHint = if (level >= 2) "\n⚠️卡顿中:必须换策略!" else ""
+        
+        // 视觉提示
+        val visionHint = if (hasVision) "\n有截图,参考视觉识别无标签元素" else ""
+
+        return basePrompt + strategyPrompt + urgentHint + visionHint
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {

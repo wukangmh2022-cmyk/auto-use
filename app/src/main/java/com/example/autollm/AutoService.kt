@@ -224,6 +224,64 @@ class AutoService : AccessibilityService() {
         dispatchGesture(builder.build(), null, null)
     }
 
+    /**
+     * 输入文字到当前焦点的输入框
+     * @param text 要输入的文字
+     * @param x 可选，如果当前没有焦点输入框，先点击此坐标
+     * @param y 可选
+     */
+    fun performInput(text: String, x: Float? = null, y: Float? = null): Boolean {
+        Log.d("AutoService", "Input text: $text at ($x, $y)")
+        
+        // 如果提供了坐标，先点击
+        if (x != null && y != null) {
+            performClick(x, y)
+            Thread.sleep(300) // 等待输入框获取焦点
+        }
+        
+        // 查找当前焦点的输入框
+        val root = rootInActiveWindow ?: return false
+        val focusedNode = findFocusedInput(root)
+        
+        if (focusedNode != null) {
+            val args = android.os.Bundle()
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            val result = focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            focusedNode.recycle()
+            return result
+        } else {
+            // 没找到焦点输入框，尝试用剪贴板方式
+            log("未找到焦点输入框，尝试剪贴板方式")
+            return pasteText(text)
+        }
+    }
+    
+    private fun findFocusedInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isFocused && node.isEditable) {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val result = findFocusedInput(child)
+            if (result != null) return result
+            child.recycle()
+        }
+        return null
+    }
+    
+    private fun pasteText(text: String): Boolean {
+        try {
+            val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("input", text)
+            clipboard.setPrimaryClip(clip)
+            // 模拟粘贴
+            return performGlobalAction(GLOBAL_ACTION_PASTE)
+        } catch (e: Exception) {
+            Log.e("AutoService", "Paste failed", e)
+            return false
+        }
+    }
+
     // --- Screenshot Utils ---
     
     fun captureScreenshotBase64(): String? {
