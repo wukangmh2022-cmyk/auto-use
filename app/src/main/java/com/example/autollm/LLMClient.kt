@@ -4,6 +4,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.BufferedReader
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import org.json.JSONObject
@@ -19,6 +20,7 @@ class LLMClient {
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        // Ensure stream is not buffered forever
         .build()
 
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
@@ -78,5 +80,73 @@ class LLMClient {
             val message = choices.getJSONObject(0).getJSONObject("message")
             return message.getString("content")
         }
+    }
+    
+    /**
+     * 流式调用
+     * onToken: 回调收到的新文本片段
+     * 返回: 完整的响应文本
+     */
+    fun streamChat(messages: List<Map<String, String>>, onToken: (String) -> Unit): String {
+        val apiKey = fetchApiKey()
+        
+        val messagesArray = JSONArray()
+        for (msg in messages) {
+            val msgObj = JSONObject()
+            msgObj.put("role", msg["role"])
+            msgObj.put("content", msg["content"])
+            messagesArray.put(msgObj)
+        }
+        
+        val requestBody = JSONObject().apply {
+            put("model", MODEL)
+            put("messages", messagesArray)
+            put("stream", true)
+        }
+
+        val request = Request.Builder()
+            .url(LLM_BASE_URL)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(requestBody.toString().toRequestBody(JSON_MEDIA))
+            .build()
+            
+        val fullResponse = StringBuilder()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("LLM stream request failed: ${response.code}")
+            }
+            
+            val source = response.body?.source() ?: throw IOException("No response body")
+            
+            while (!source.exhausted()) {
+                val line = source.readUtf8Line() ?: break
+                if (line.isBlank()) continue
+                
+                if (line.startsWith("data: ")) {
+                    val data = line.substring(6).trim()
+                    if (data == "[DONE]") break
+                    
+                    try {
+                        val json = JSONObject(data)
+                        val choices = json.getJSONArray("choices")
+                        if (choices.length() > 0) {
+                            val delta = choices.getJSONObject(0).optJSONObject("delta")
+                            val content = delta?.optString("content")
+                            
+                            if (!content.isNullOrEmpty()) {
+                                fullResponse.append(content)
+                                onToken(content)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Ignore parsing errors for interim chunks
+                    }
+                }
+            }
+        }
+        
+        return fullResponse.toString()
     }
 }

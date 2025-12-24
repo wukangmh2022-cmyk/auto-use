@@ -20,7 +20,7 @@ class TaskPlanner(private val llmClient: LLMClient) {
         val task: String,
         val steps: List<TaskStep>,
         var currentStepIndex: Int = 0,
-        var scheduledTime: String? = null // 格式: "HH:mm" 或 null
+        var scheduledTime: String? = null
     ) {
         fun currentStep(): TaskStep? = steps.getOrNull(currentStepIndex)
         fun isCompleted(): Boolean = currentStepIndex >= steps.size
@@ -78,8 +78,9 @@ class TaskPlanner(private val llmClient: LLMClient) {
         }
     }
 
-    fun generatePlan(userRequest: String, onLog: (String) -> Unit): TaskPlan? {
-        onLog("正在生成任务计划...")
+    // onProgress: 用来实时显示生成内容的原始内容
+    fun generatePlan(userRequest: String, onProgress: (String) -> Unit): TaskPlan? {
+        onProgress("正在请求 LLM 生成计划...\n")
         
         val systemPrompt = """你是一个 Android 手机自动化任务规划师。
 根据用户的需求，生成一个清晰的执行步骤列表，每个步骤包含描述和预期页面关键词。
@@ -106,12 +107,18 @@ class TaskPlanner(private val llmClient: LLMClient) {
         val userPrompt = "用户需求：$userRequest"
 
         return try {
-            val response = llmClient.chat(listOf(
+            val accumulatedText = StringBuilder()
+            
+            // 使用流式调用
+            val response = llmClient.streamChat(listOf(
                 mapOf("role" to "system", "content" to systemPrompt),
                 mapOf("role" to "user", "content" to userPrompt)
-            ))
+            )) { token ->
+                accumulatedText.append(token)
+                onProgress(accumulatedText.toString())
+            }
             
-            onLog("LLM 响应: ${response.take(200)}...")
+            onProgress(response) // 确保最后显示完整的
             
             val jsonStart = response.indexOf("{")
             val jsonEnd = response.lastIndexOf("}") + 1
@@ -119,18 +126,16 @@ class TaskPlanner(private val llmClient: LLMClient) {
                 val jsonStr = response.substring(jsonStart, jsonEnd)
                 val json = JSONObject(jsonStr)
                 
-                // Add id
                 json.put("id", System.currentTimeMillis().toString())
                 
                 val plan = TaskPlan.fromJson(json)
-                onLog("计划生成成功: ${plan.steps.size} 个步骤")
                 plan
             } else {
-                onLog("无法解析计划 JSON")
+                onProgress("\n无法解析 JSON")
                 null
             }
         } catch (e: Exception) {
-            onLog("生成计划失败: ${e.message}")
+            onProgress("\n生成失败: ${e.message}")
             Log.e("TaskPlanner", "Failed to generate plan", e)
             null
         }

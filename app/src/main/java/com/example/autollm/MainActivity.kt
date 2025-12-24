@@ -85,8 +85,14 @@ class MainActivity : AppCompatActivity() {
             Thread {
                 val llmClient = LLMClient()
                 val planner = TaskPlanner(llmClient)
-                val plan = planner.generatePlan(request) { msg ->
-                    handler.post { appendLog(msg) }
+                
+                // 实时更新 tvPlan 显示生成过程
+                val plan = planner.generatePlan(request) { partialText ->
+                    val cleanText = partialText.replace("\\n", "\n") // Simple cleanup
+                    handler.post { 
+                        tvPlan.text = cleanText
+                        // Scroll to bottom if needed (optional, simplistic here)
+                    }
                 }
                 
                 handler.post {
@@ -98,7 +104,7 @@ class MainActivity : AppCompatActivity() {
                         btnSave.isEnabled = true
                         appendLog("计划已生成，请确认后执行")
                     } else {
-                        tvPlan.text = "计划生成失败"
+                        tvPlan.text = "计划生成失败，请重试"
                     }
                 }
             }.start()
