@@ -21,14 +21,15 @@ class AutoService : AccessibilityService() {
         var isRunning = false
         var onLogCallback: ((String) -> Unit)? = null
         var onPlanCallback: ((TaskPlanner.TaskPlan?) -> Unit)? = null
-        var onTokenUpdateCallback: ((Int) -> Unit)? = null // NEW
+        var onTokenUpdateCallback: ((Int) -> Unit)? = null
         
         // 定时任务触发时使用
         var pendingPlanToExecute: TaskPlanner.TaskPlan? = null
     }
 
     private var agentController: AgentController? = null
-    // ...
+    private val handler = Handler(Looper.getMainLooper())
+    private var loopRunnable: Runnable? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -39,83 +40,25 @@ class AutoService : AccessibilityService() {
             onLogCallback?.invoke(msg)
         }
         
+        agentController?.onPlanUpdated = { plan ->
+            handler.post { onPlanCallback?.invoke(plan) }
+        }
+        
         // Pass token usage to UI
         agentController?.onTokenUsage = { total ->
              onTokenUpdateCallback?.invoke(total)
         }
         
-        // ... (rest)
+        // 检查是否有待执行的定时任务
+        pendingPlanToExecute?.let { plan ->
+            pendingPlanToExecute = null
+            startWithPlan(plan)
+        }
     }
     
     fun setVisionMode(enabled: Boolean) {
         agentController?.setVisionMode(enabled)
         log("视觉模式: ${if(enabled) "开启" else "关闭"}")
-    }
-
-    // ... (rest of methods)
-
-    // --- Screenshot Utils ---
-    
-    fun captureScreenshotBase64(): String? {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            log("截图功能需要 Android 11+")
-            return null
-        }
-        
-        var resultBase64: String? = null
-        val latch = java.util.concurrent.CountDownLatch(1)
-        
-        try {
-            takeScreenshot(
-                android.view.Display.DEFAULT_DISPLAY,
-                this.mainExecutor,
-                object : TakeScreenshotCallback {
-                    override fun onSuccess(screenshot: ScreenshotResult) {
-                        try {
-                            val bitmap = android.graphics.Bitmap.wrapHardwareBuffer(
-                                screenshot.hardwareBuffer,
-                                screenshot.colorSpace
-                            )
-                            resultBase64 = compressBitmap(bitmap)
-                            screenshot.hardwareBuffer.close()
-                        } catch (e: Exception) {
-                            Log.e("AutoService", "Screenshot process failed", e)
-                        } finally {
-                            latch.countDown()
-                        }
-                    }
-
-                    override fun onFailure(errorCode: Int) {
-                        Log.e("AutoService", "Screenshot failed code: $errorCode")
-                        latch.countDown()
-                    }
-                }
-            )
-            
-            latch.await(2000, java.util.concurrent.TimeUnit.MILLISECONDS)
-        } catch (e: Exception) {
-            Log.e("AutoService", "Take screenshot error", e)
-        }
-        
-        return resultBase64
-    }
-    
-    private fun compressBitmap(bitmap: android.graphics.Bitmap?): String? {
-        if (bitmap == null) return null
-        // Copy to software bitmap to scale
-        val swBitmap = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, true) ?: return null
-        
-        val maxDim = 512
-        val scale = Math.min(maxDim.toFloat() / swBitmap.width, maxDim.toFloat() / swBitmap.height)
-        val matrix = android.graphics.Matrix()
-        matrix.postScale(scale, scale)
-        
-        val scaled = android.graphics.Bitmap.createBitmap(swBitmap, 0, 0, swBitmap.width, swBitmap.height, matrix, true)
-        
-        val stream = java.io.ByteArrayOutputStream()
-        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 60, stream)
-        val bytes = stream.toByteArray()
-        return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }
 
     /**
@@ -279,5 +222,69 @@ class AutoService : AccessibilityService() {
         val builder = GestureDescription.Builder()
         builder.addStroke(GestureDescription.StrokeDescription(path, 0, 500))
         dispatchGesture(builder.build(), null, null)
+    }
+
+    // --- Screenshot Utils ---
+    
+    fun captureScreenshotBase64(): String? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            log("截图功能需要 Android 11+")
+            return null
+        }
+        
+        var resultBase64: String? = null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        
+        try {
+            takeScreenshot(
+                android.view.Display.DEFAULT_DISPLAY,
+                this.mainExecutor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(screenshot: ScreenshotResult) {
+                        try {
+                            val bitmap = android.graphics.Bitmap.wrapHardwareBuffer(
+                                screenshot.hardwareBuffer,
+                                screenshot.colorSpace
+                            )
+                            resultBase64 = compressBitmap(bitmap)
+                            screenshot.hardwareBuffer.close()
+                        } catch (e: Exception) {
+                            Log.e("AutoService", "Screenshot process failed", e)
+                        } finally {
+                            latch.countDown()
+                        }
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        Log.e("AutoService", "Screenshot failed code: $errorCode")
+                        latch.countDown()
+                    }
+                }
+            )
+            
+            latch.await(2000, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: Exception) {
+            Log.e("AutoService", "Take screenshot error", e)
+        }
+        
+        return resultBase64
+    }
+    
+    private fun compressBitmap(bitmap: android.graphics.Bitmap?): String? {
+        if (bitmap == null) return null
+        // Copy to software bitmap to scale
+        val swBitmap = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, true) ?: return null
+        
+        val maxDim = 512
+        val scale = Math.min(maxDim.toFloat() / swBitmap.width, maxDim.toFloat() / swBitmap.height)
+        val matrix = android.graphics.Matrix()
+        matrix.postScale(scale, scale)
+        
+        val scaled = android.graphics.Bitmap.createBitmap(swBitmap, 0, 0, swBitmap.width, swBitmap.height, matrix, true)
+        
+        val stream = java.io.ByteArrayOutputStream()
+        scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 60, stream)
+        val bytes = stream.toByteArray()
+        return android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
     }
 }

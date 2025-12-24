@@ -70,10 +70,19 @@ class LLMClient {
             put("messages", messagesArray)
         }
         
-        // ...
+        val request = Request.Builder()
+            .url(LLM_BASE_URL)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(requestBody.toString().toRequestBody(JSON_MEDIA))
+            .build()
         
         client.newCall(request).execute().use { response ->
-            // ...
+            val body = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                throw IOException("LLM request failed: ${response.code} - $body")
+            }
+            
             val json = JSONObject(body)
             
             // Track usage
@@ -84,7 +93,10 @@ class LLMClient {
             }
             
             val choices = json.getJSONArray("choices")
-            // ...
+            if (choices.length() == 0) throw IOException("No choices in response")
+            
+            val message = choices.getJSONObject(0).getJSONObject("message")
+            return message.getString("content")
         }
     }
     
