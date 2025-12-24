@@ -127,7 +127,7 @@ class LLMClient {
         }
         
         val requestBody = JSONObject().apply {
-            put("model", MODEL)
+            put("model", getCurrentModel())
             put("messages", messagesArray)
             put("stream", true)
         }
