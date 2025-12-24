@@ -33,121 +33,85 @@ class AgentController(
      */
     fun generatePlan(userRequest: String): Boolean {
         history.clear()
-        currentPlan = taskPlanner.generatePlan(userRequest, onLog)
-        onPlanUpdated?.invoke(currentPlan)
-        return currentPlan != null
-    }
-
-    /**
-     * 阶段二：执行一步（含页面校验）
+     * 阶段二：执行一步（含页面校验和变化检测）
      */
     fun executeStep(): Boolean {
-        val plan = currentPlan ?: run {
-            log("没有可执行的计划")
-            return false
-        }
-        
-        if (plan.isCompleted()) {
-            log("所有步骤已完成！")
-            return false
-        }
+        val plan = currentPlan ?: return false
+        if (plan.isCompleted()) return false
 
         try {
-            // 1. Dump UI
+            // 1. Dump UI (含变化检测)
             val uiJson = autoService.dumpUI()
+            
+            if (uiJson == "SAME") {
+                log("界面未变化，跳过本次请求...")
+                Thread.sleep(2000) // 界面没变时多等一会儿
+                return true
+            }
+
             log("[${plan.progress()}] 界面: ${compressUiLog(uiJson)}")
 
             // 2. 页面校验
             val currentStep = plan.currentStep()
             if (currentStep != null && currentStep.expectedKeywords.isNotEmpty()) {
-                val pageValid = validatePage(uiJson, currentStep.expectedKeywords)
-                if (!pageValid) {
-                    log("⚠️ 页面校验失败，可能不在预期页面")
-                    // Continue anyway, let LLM handle navigation
+                if (!validatePage(uiJson, currentStep.expectedKeywords)) {
+                    log("⚠️ 页面不匹配: ${currentStep.expectedKeywords}")
                 }
             }
 
-            // 3. Build prompt with plan context
+            // 3. Build prompt
             val prompt = buildPrompt(uiJson, plan)
             
             // 4. Call LLM
-            log("请求 LLM...")
             val response = llmClient.chat(listOf(
                 mapOf("role" to "system", "content" to getSystemPrompt()),
                 mapOf("role" to "user", "content" to prompt)
             ))
-            log("LLM 响应: ${response.take(100)}...")
 
-            // 5. Parse action
-            val action = parseAction(response)
-            if (action == null) {
-                log("无法解析操作")
-                return true
-            }
-
-            // 6. Execute action
+            // 5. Parse and Execute
+            val action = parseAction(response) ?: return true
             val actionType = action.optString("action", "")
             val stepCompleted = action.optBoolean("step_completed", false)
             
-            log("执行操作: $actionType" + if (stepCompleted) " (步骤完成)" else "")
+            log("执行: $actionType" + if (stepCompleted) " (步完)" else "")
             
             when (actionType) {
                 "click" -> {
-                    val x = action.optInt("x", 0)
-                    val y = action.optInt("y", 0)
-                    autoService.performClick(x.toFloat(), y.toFloat())
-                    addHistory("点击了 ($x, $y)")
+                    val coords = action.optString("b", "0,0").split(",")
+                    if (coords.size == 2) {
+                        autoService.performClick(coords[0].toFloat(), coords[1].toFloat())
+                        addHistory("点击了 ${action.optString("b")}")
+                    }
                 }
-                "back" -> {
-                    autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-                    addHistory("按了返回键")
-                }
-                "home" -> {
-                    autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                    addHistory("按了Home键")
-                }
+                "back" -> autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK).also { addHistory("返回") }
+                "home" -> autoService.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME).also { addHistory("主页") }
                 "wait" -> {
-                    val seconds = action.optInt("seconds", 2)
-                    log("等待 ${seconds} 秒")
-                    Thread.sleep(seconds * 1000L)
-                    addHistory("等待了 ${seconds} 秒")
+                    val sec = action.optInt("s", 2)
+                    Thread.sleep(sec * 1000L)
+                    addHistory("等待 ${sec}s")
                 }
-                "scroll_down" -> {
-                    autoService.performSwipe(540f, 1500f, 540f, 500f)
-                    addHistory("向下滑动")
-                }
-                "scroll_up" -> {
-                    autoService.performSwipe(540f, 500f, 540f, 1500f)
-                    addHistory("向上滑动")
-                }
+                "scroll_down" -> autoService.performSwipe(540f, 1500f, 540f, 500f).also { addHistory("下滑") }
+                "scroll_up" -> autoService.performSwipe(540f, 500f, 540f, 1500f).also { addHistory("上滑") }
                 "done" -> {
-                    val reason = action.optString("reason", "任务完成")
-                    log("🎉 任务完成: $reason")
+                    log("任务完成: ${action.optString("r", "完成")}")
                     currentPlan = null
                     onPlanUpdated?.invoke(null)
                     return false
                 }
             }
             
-            // 7. Advance to next step if completed
             if (stepCompleted) {
                 plan.currentStepIndex++
                 history.clear()
                 onPlanUpdated?.invoke(plan)
-                
-                if (plan.isCompleted()) {
-                    log("🎉 所有步骤已完成！")
-                    return false
-                } else {
-                    log("进入下一步: ${plan.currentStep()?.description}")
-                }
+                log("下一步: ${plan.currentStep()?.description ?: "结束"}")
+                return !plan.isCompleted()
             }
             
             return true
             
         } catch (e: Exception) {
             log("错误: ${e.message}")
-            Log.e("AgentController", "Error in executeStep", e)
             return true
         }
     }
@@ -163,56 +127,24 @@ class AgentController(
     }
 
     private fun getSystemPrompt(): String {
-        return """你是一个 Android 手机自动化执行助手。根据任务计划和当前界面，决定下一步操作。
-
-【可用操作】
-- {"action":"click","x":数字,"y":数字,"step_completed":布尔} - 点击坐标
-- {"action":"back","step_completed":布尔} - 返回键
-- {"action":"home","step_completed":布尔} - Home键
-- {"action":"wait","seconds":数字,"step_completed":布尔} - 等待
-- {"action":"scroll_down","step_completed":布尔} - 向下滑动
-- {"action":"scroll_up","step_completed":布尔} - 向上滑动
-- {"action":"done","reason":"原因"} - 整个任务完成
-
-【规则】
-1. 只输出一个 JSON 对象，不要有其他文字
-2. 点击坐标 = (左+右)/2, (上+下)/2，根据 bnds 字段计算
-3. 当前步骤完成后，设置 "step_completed": true
-4. 如果界面不是预期的，尝试导航到正确界面
-5. 如果整个任务已完成，使用 done"""
+        return """Android助手。协议:
+- t:文本, d:描述, i:ID, c:类名, b:中心点坐标(x,y), k:1(可点)
+操作(JSON):
+- {"action":"click","b":"x,y","step_completed":布尔}
+- {"action":"back","step_completed":布尔}
+- {"action":"wait","s":秒,"step_completed":布尔}
+- {"action":"scroll_down/up","step_completed":布尔}
+- {"action":"done","r":"原因"}
+规则: 1.只回JSON 2.优先点带t/d的元素 3.步完设step_completed:true"""
     }
 
     private fun buildPrompt(uiJson: String, plan: TaskPlanner.TaskPlan): String {
-        val stepsText = plan.steps.mapIndexed { i, step ->
-            val marker = when {
-                i < plan.currentStepIndex -> "✓"
-                i == plan.currentStepIndex -> "→"
-                else -> " "
-            }
-            "$marker ${i + 1}. ${step.description}"
-        }.joinToString("\n")
-        
         val currentStep = plan.currentStep()
-        val keywordsHint = if (currentStep?.expectedKeywords?.isNotEmpty() == true) {
-            "\n预期页面关键词: ${currentStep.expectedKeywords.joinToString(", ")}"
-        } else ""
+        val historyText = if (history.isEmpty()) "" else "\n近况:${history.joinToString()}"
         
-        val historyText = if (history.isEmpty()) "无" else history.mapIndexed { i, h -> "${i + 1}. $h" }.joinToString("\n")
-        
-        return """【任务】${plan.task}
-
-【执行计划】
-$stepsText
-
-【当前步骤】${currentStep?.description}$keywordsHint
-
-【本步骤已执行的操作】
-$historyText
-
-【当前界面元素】
-$uiJson
-
-请根据当前步骤和界面，输出下一步操作的 JSON。如果当前步骤已完成，设置 step_completed: true。"""
+        return """任务:${plan.task}
+进度:${plan.progress()} 目标:${currentStep?.description}
+界面:$uiJson$historyText"""
     }
 
     private fun parseAction(response: String): JSONObject? {
@@ -246,8 +178,8 @@ $uiJson
             sb.append("(${ja.length()}个) ")
             for (i in 0 until ja.length()) {
                 val obj = ja.getJSONObject(i)
-                val txt = obj.optString("txt")
-                val desc = obj.optString("desc")
+                val txt = obj.optString("t")
+                val desc = obj.optString("d")
                 val label = if (txt.isNotEmpty()) txt else desc
                 if (label.isNotEmpty()) {
                     sb.append("[$label] ")

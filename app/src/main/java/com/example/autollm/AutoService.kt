@@ -141,31 +141,52 @@ class AutoService : AccessibilityService() {
 
     // --- API for AgentController ---
 
+    private var lastUiHash: Int = 0
+
     fun dumpUI(): String {
         val root = rootInActiveWindow ?: return "[]"
         val list = JSONArray()
         collectNodes(root, list)
-        return list.toString()
+        val result = list.toString()
+        
+        // 简单哈希用于变化检测
+        val currentHash = result.hashCode()
+        if (currentHash == lastUiHash && isRunning) {
+            return "SAME" // 特殊标记，表示界面无变化
+        }
+        lastUiHash = currentHash
+        return result
     }
 
     private fun collectNodes(node: AccessibilityNodeInfo, list: JSONArray) {
-        if (node.isVisibleToUser) {
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
+        if (!node.isVisibleToUser) return
+
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        
+        val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
+        val isClickable = node.isClickable
+        
+        // 过滤：只有有文字、有描述，或者明确可点击的节点才上传
+        if (text.isNotEmpty() || desc.isNotEmpty() || isClickable) {
+            val info = JSONObject()
+            if (text.isNotEmpty()) info.put("t", text)
+            if (desc.isNotEmpty()) info.put("d", desc)
+            if (isClickable) info.put("k", 1) // 1 表示 true
             
-            val text = node.text?.toString()
-            val desc = node.contentDescription?.toString()
-            
-            if (!text.isNullOrEmpty() || !desc.isNullOrEmpty() || node.isClickable) {
-                val info = JSONObject()
-                info.put("txt", text ?: "")
-                info.put("desc", desc ?: "")
-                info.put("id", node.viewIdResourceName ?: "")
-                info.put("cls", node.className?.toString()?.substringAfterLast(".") ?: "")
-                info.put("bnds", "${rect.left},${rect.top},${rect.right},${rect.bottom}")
-                info.put("clk", node.isClickable)
-                list.put(info)
+            // 只有在没有文字/描述但可点击时，才强制上传 ID 和 Class 以便 LLM 猜测
+            if (text.isEmpty() && desc.isEmpty()) {
+                val id = node.viewIdResourceName?.substringAfterLast("/") ?: ""
+                if (id.isNotEmpty()) info.put("i", id)
+                val cls = node.className?.toString()?.substringAfterLast(".") ?: ""
+                if (cls.isNotEmpty()) info.put("c", cls)
             }
+            
+            // 坐标精简：只保留中心点
+            info.put("b", "${rect.centerX()},${rect.centerY()}")
+            
+            list.put(info)
         }
         
         for (i in 0 until node.childCount) {
